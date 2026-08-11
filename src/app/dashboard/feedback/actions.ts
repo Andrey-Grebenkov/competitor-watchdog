@@ -7,7 +7,11 @@ import {
   isFeedbackType,
 } from "@/lib/feedback";
 import { prisma } from "@/lib/prisma";
-import { escapeHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
+import {
+  escapeHtml,
+  isTelegramConfigured,
+  sendTelegramMessage,
+} from "@/lib/telegram";
 
 export interface FeedbackFormState {
   error?: string;
@@ -30,7 +34,9 @@ export async function submitFeedback(
     return { error: "Сообщение должно быть не короче 5 символов" };
   }
   if (message.length > MAX_FEEDBACK_LENGTH) {
-    return { error: `Сообщение не должно превышать ${MAX_FEEDBACK_LENGTH} символов` };
+    return {
+      error: `Сообщение не должно превышать ${MAX_FEEDBACK_LENGTH} символов`,
+    };
   }
 
   const user = await getCurrentUser();

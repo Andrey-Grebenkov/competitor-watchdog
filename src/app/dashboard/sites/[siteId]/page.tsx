@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { badge, card, ghostButton } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function SiteHistoryPage({
             {site.url}
           </p>
         </div>
-        <Link href="/dashboard" className="text-sm underline underline-offset-4">
+        <Link href="/dashboard" className={ghostButton}>
           К списку сайтов
         </Link>
       </header>
@@ -52,16 +53,11 @@ export default async function SiteHistoryPage({
           </p>
         ) : (
           site.history.map((check) => (
-            <article
-              key={check.id}
-              className="rounded-lg border border-black/10 p-4 dark:border-white/15"
-            >
+            <article key={check.id} className={`p-4 ${card}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span
                   className={
-                    check.isAlertTriggered
-                      ? "rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-                      : "rounded-full bg-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700"
+                    check.isAlertTriggered ? badge.alert : badge.neutral
                   }
                 >
                   {check.isAlertTriggered ? "есть изменения" : "без изменений"}

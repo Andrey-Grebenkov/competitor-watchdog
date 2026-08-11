@@ -4,6 +4,7 @@ import { signOutUser } from "@/app/(auth)/actions";
 import { PLAN_LIMITS, type PlanName } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { badge, card, ghostButton, ghostButtonWarning } from "@/lib/ui";
 import { AddSiteForm } from "./AddSiteForm";
 import { toggleSite } from "./actions";
 
@@ -45,43 +46,40 @@ export default async function DashboardPage() {
             сайтов · минимальный интервал {plan.minIntervalHours} ч
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <Link
-            href="/dashboard/feedback"
-            className="underline underline-offset-4"
-          >
+        <nav className="flex items-center gap-1">
+          <Link href="/dashboard/feedback" className={ghostButton}>
             Обратная связь
           </Link>
-          <Link href="/" className="underline underline-offset-4">
+          <Link href="/" className={ghostButton}>
             На главную
           </Link>
           <form action={signOutUser}>
-            <button type="submit" className="underline underline-offset-4">
+            <button type="submit" className={ghostButton}>
               Выйти
             </button>
           </form>
-        </div>
+        </nav>
       </header>
 
       <section className="mt-8">
         <AddSiteForm />
       </section>
 
-      <section className="mt-10 overflow-x-auto">
+      <section className={`mt-10 overflow-x-auto p-1 ${card}`}>
         {sites.length === 0 ? (
-          <p className="text-sm text-black/60 dark:text-white/60">
+          <p className="px-4 py-6 text-sm text-black/60 dark:text-white/60">
             Пока нет сайтов для отслеживания.
           </p>
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-black/10 text-left dark:border-white/15">
-                <th className="py-2 pr-4 font-medium">Сайт</th>
-                <th className="py-2 pr-4 font-medium">Статус</th>
-                <th className="py-2 pr-4 font-medium">Интервал</th>
-                <th className="py-2 pr-4 font-medium">Последняя проверка</th>
-                <th className="py-2 pr-4 font-medium">Проверок</th>
-                <th className="py-2 font-medium">Действия</th>
+              <tr className="border-b border-black/10 text-left text-slate-500 dark:border-white/15 dark:text-slate-400">
+                <th className="px-4 py-3 font-medium">Сайт</th>
+                <th className="px-4 py-3 font-medium">Статус</th>
+                <th className="px-4 py-3 font-medium">Интервал</th>
+                <th className="px-4 py-3 font-medium">Последняя проверка</th>
+                <th className="px-4 py-3 font-medium">Проверок</th>
+                <th className="px-4 py-3 font-medium">Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -90,47 +88,42 @@ export default async function DashboardPage() {
                 return (
                   <tr
                     key={site.id}
-                    className="border-b border-black/5 dark:border-white/10"
+                    className="border-b border-black/5 transition last:border-0 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
                   >
-                    <td className="py-3 pr-4">
+                    <td className="px-4 py-3">
                       <div className="font-medium">{site.name}</div>
                       <div className="text-xs break-all text-black/50 dark:text-white/50">
                         {site.url}
                         {site.cssSelector ? ` · ${site.cssSelector}` : ""}
                       </div>
                     </td>
-                    <td className="py-3 pr-4">
+                    <td className="px-4 py-3">
                       <span
                         className={
-                          site.isActive
-                            ? "rounded-full bg-green-100 px-2 py-1 text-xs text-green-800"
-                            : "rounded-full bg-neutral-200 px-2 py-1 text-xs text-neutral-700"
+                          site.isActive ? badge.success : badge.neutral
                         }
                       >
                         {site.isActive ? "активен" : "на паузе"}
                       </span>
                     </td>
-                    <td className="py-3 pr-4">{site.checkIntervalHours} ч</td>
-                    <td className="py-3 pr-4">
+                    <td className="px-4 py-3">{site.checkIntervalHours} ч</td>
+                    <td className="px-4 py-3">
                       {lastCheck
                         ? dateFormatter.format(lastCheck.checkedAt)
                         : "—"}
                     </td>
-                    <td className="py-3 pr-4">{site._count.history}</td>
-                    <td className="py-3">
-                      <div className="flex items-center gap-3">
+                    <td className="px-4 py-3">{site._count.history}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
                         <Link
                           href={`/dashboard/sites/${site.id}`}
-                          className="underline underline-offset-4"
+                          className={ghostButton}
                         >
                           История
                         </Link>
                         <form action={toggleSite}>
                           <input type="hidden" name="siteId" value={site.id} />
-                          <button
-                            type="submit"
-                            className="underline underline-offset-4"
-                          >
+                          <button type="submit" className={ghostButtonWarning}>
                             {site.isActive ? "Пауза" : "Включить"}
                           </button>
                         </form>

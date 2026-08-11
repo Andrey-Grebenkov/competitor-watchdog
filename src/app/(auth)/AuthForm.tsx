@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { card, ghostButton, input, primaryButton } from "@/lib/ui";
 import type { AuthFormState } from "./actions";
 
 type AuthAction = (
@@ -34,21 +35,29 @@ const COPY = {
   },
 } as const;
 
-function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
+function SubmitButton({
+  label,
+  pendingLabel,
+}: {
+  label: string;
+  pendingLabel: string;
+}) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
-    >
+    <button type="submit" disabled={pending} className={primaryButton}>
+      {pending ? (
+        <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+      ) : null}
       {pending ? pendingLabel : label}
     </button>
   );
 }
 
 export function AuthForm({ mode, action }: AuthFormProps) {
-  const [state, formAction] = useActionState<AuthFormState, FormData>(action, {});
+  const [state, formAction] = useActionState<AuthFormState, FormData>(
+    action,
+    {},
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const copy = COPY[mode];
@@ -62,10 +71,7 @@ export function AuthForm({ mode, action }: AuthFormProps) {
         </p>
       </div>
 
-      <form
-        action={formAction}
-        className="flex flex-col gap-4 rounded-lg border border-black/10 p-6 dark:border-white/15"
-      >
+      <form action={formAction} className={`flex flex-col gap-4 p-6 ${card}`}>
         {mode === "register" ? (
           <label className="flex flex-col gap-1 text-sm">
             Имя (опционально)
@@ -74,7 +80,7 @@ export function AuthForm({ mode, action }: AuthFormProps) {
               value={name}
               onChange={(event) => setName(event.target.value)}
               autoComplete="name"
-              className="rounded-md border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
+              className={input}
             />
           </label>
         ) : null}
@@ -88,7 +94,7 @@ export function AuthForm({ mode, action }: AuthFormProps) {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
-            className="rounded-md border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
+            className={input}
           />
         </label>
 
@@ -99,8 +105,10 @@ export function AuthForm({ mode, action }: AuthFormProps) {
             type="password"
             required
             minLength={8}
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            className="rounded-md border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
+            autoComplete={
+              mode === "login" ? "current-password" : "new-password"
+            }
+            className={input}
           />
         </label>
 
@@ -111,9 +119,9 @@ export function AuthForm({ mode, action }: AuthFormProps) {
         <SubmitButton label={copy.submit} pendingLabel={copy.pending} />
       </form>
 
-      <p className="text-sm text-black/60 dark:text-white/60">
-        {copy.hint}{" "}
-        <Link href={copy.href} className="underline underline-offset-4">
+      <p className="flex flex-wrap items-center gap-1 text-sm text-black/60 dark:text-white/60">
+        {copy.hint}
+        <Link href={copy.href} className={ghostButton}>
           {copy.linkText}
         </Link>
       </p>

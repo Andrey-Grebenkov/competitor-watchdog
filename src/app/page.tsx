@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { badge, card, ghostButton, primaryButton } from "@/lib/ui";
 
 const features = [
   {
@@ -39,9 +40,7 @@ export default function Home() {
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-16 px-6 py-20">
       <section className="flex flex-col items-start gap-6">
-        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
-          B2B Micro-SaaS
-        </span>
+        <span className={badge.accent}>B2B Micro-SaaS</span>
         <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
           Competitor Watchdog
         </h1>
@@ -50,23 +49,17 @@ export default function Home() {
           промо-баннеры и наличие товаров. Беспилотный браузер снимает страницы
           по расписанию, а Vision AI объясняет, что именно изменилось.
         </p>
-        <div className="flex flex-wrap items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="rounded-md bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500"
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/dashboard" className={`${primaryButton} px-5 py-3`}>
             Перейти в дашборд
           </Link>
-          <Link href="/login" className="text-sm underline underline-offset-4">
+          <Link href="/login" className={ghostButton}>
             Войти
           </Link>
-          <Link href="/register" className="text-sm underline underline-offset-4">
+          <Link href="/register" className={ghostButton}>
             Регистрация
           </Link>
-          <Link
-            href="/dashboard/feedback"
-            className="text-sm underline underline-offset-4"
-          >
+          <Link href="/dashboard/feedback" className={ghostButton}>
             Обратная связь
           </Link>
         </div>
@@ -76,7 +69,7 @@ export default function Home() {
         {features.map((feature) => (
           <div
             key={feature.title}
-            className="rounded-lg border border-black/10 p-5 dark:border-white/15"
+            className={`p-5 transition hover:shadow-md ${card}`}
           >
             <h2 className="font-medium">{feature.title}</h2>
             <p className="mt-2 text-sm text-black/60 dark:text-white/60">
@@ -90,7 +83,7 @@ export default function Home() {
         {plans.map((plan) => (
           <div
             key={plan.name}
-            className="rounded-lg border border-black/10 p-6 dark:border-white/15"
+            className={`p-6 transition hover:shadow-md ${card}`}
           >
             <h2 className="text-lg font-medium">{plan.name}</h2>
             <p className="mt-1 text-2xl font-semibold">{plan.price}</p>

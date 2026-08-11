@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/currentUser";
+import { ghostButton } from "@/lib/ui";
 import { FeedbackForm } from "./FeedbackForm";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,7 @@ export default async function FeedbackPage() {
             впечатлением.
           </p>
         </div>
-        <Link
-          href={user ? "/dashboard" : "/"}
-          className="text-sm underline underline-offset-4"
-        >
+        <Link href={user ? "/dashboard" : "/"} className={ghostButton}>
           {user ? "К списку сайтов" : "На главную"}
         </Link>
       </header>

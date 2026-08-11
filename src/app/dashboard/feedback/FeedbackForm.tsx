@@ -7,6 +7,7 @@ import {
   FEEDBACK_TYPE_LABELS,
   MAX_FEEDBACK_LENGTH,
 } from "@/lib/feedback";
+import { card, input, primaryButton } from "@/lib/ui";
 import { submitFeedback, type FeedbackFormState } from "./actions";
 
 function SubmitButton() {
@@ -15,7 +16,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex items-center gap-2 self-start rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+      className={`self-start ${primaryButton}`}
     >
       {pending ? (
         <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -33,17 +34,14 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
 
   if (state.success) {
     return (
-      <div className="rounded-lg border border-green-600/30 bg-green-50 p-6 text-sm text-green-800 dark:bg-green-950/30 dark:text-green-300">
+      <div className="rounded-xl border border-green-600/30 bg-green-50 p-6 text-sm text-green-800 shadow-sm dark:bg-green-950/30 dark:text-green-300">
         Спасибо за ваш отзыв!
       </div>
     );
   }
 
   return (
-    <form
-      action={formAction}
-      className="flex flex-col gap-4 rounded-lg border border-black/10 p-6 dark:border-white/15"
-    >
+    <form action={formAction} className={`flex flex-col gap-4 p-6 ${card}`}>
       {userEmail ? (
         <p className="text-sm text-black/60 dark:text-white/60">
           Отзыв будет отправлен от {userEmail}
@@ -56,7 +54,7 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
             type="email"
             required
             autoComplete="email"
-            className="rounded-md border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
+            className={input}
           />
         </label>
       )}
@@ -65,7 +63,10 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
         <legend className="mb-1">Тип отзыва</legend>
         <div className="flex flex-wrap gap-4">
           {FEEDBACK_TYPES.map((type, index) => (
-            <label key={type} className="flex items-center gap-2">
+            <label
+              key={type}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-black/10 px-3 py-1.5 transition hover:bg-slate-100 dark:border-white/15 dark:hover:bg-slate-800"
+            >
               <input
                 type="radio"
                 name="type"
@@ -88,11 +89,13 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
           minLength={5}
           maxLength={MAX_FEEDBACK_LENGTH}
           placeholder="Что сломалось, чего не хватает или что понравилось?"
-          className="rounded-md border border-black/15 px-3 py-2 dark:border-white/20 dark:bg-transparent"
+          className={input}
         />
       </label>
 
-      {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
+      {state.error ? (
+        <p className="text-sm text-red-600">{state.error}</p>
+      ) : null}
 
       <SubmitButton />
     </form>
