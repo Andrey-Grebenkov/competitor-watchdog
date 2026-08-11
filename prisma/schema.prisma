@@ -1,0 +1,40 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                 String        @id @default(uuid())
+  email              String        @unique
+  passwordHash       String
+  subscriptionStatus String        @default("free") // free, premium
+  createdAt          DateTime      @default(now())
+  sites              WatchedSite[]
+}
+
+model WatchedSite {
+  id                 String         @id @default(uuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [id])
+  url                String
+  name               String
+  cssSelector        String?
+  checkIntervalHours Int            @default(24)
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  history            CheckHistory[]
+}
+
+model CheckHistory {
+  id               String      @id @default(uuid())
+  siteId           String
+  site             WatchedSite @relation(fields: [siteId], references: [id])
+  screenshotUrl    String
+  aiSummary        String?
+  isAlertTriggered Boolean     @default(false)
+  checkedAt        DateTime    @default(now())
+}
