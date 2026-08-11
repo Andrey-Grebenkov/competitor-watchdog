@@ -20,6 +20,7 @@ model User {
   sites              WatchedSite[]
   accounts           Account[]
   sessions           Session[]
+  feedback           Feedback[]
 }
 
 model Account {
@@ -67,6 +68,16 @@ model WatchedSite {
   isActive           Boolean        @default(true)
   createdAt          DateTime       @default(now())
   history            CheckHistory[]
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail String
+  type      String // bug, feature, general
+  message   String
+  createdAt DateTime @default(now())
 }
 
 model CheckHistory {

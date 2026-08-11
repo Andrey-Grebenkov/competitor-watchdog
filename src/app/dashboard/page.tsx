@@ -46,6 +46,12 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm">
+          <Link
+            href="/dashboard/feedback"
+            className="underline underline-offset-4"
+          >
+            Обратная связь
+          </Link>
           <Link href="/" className="underline underline-offset-4">
             На главную
           </Link>

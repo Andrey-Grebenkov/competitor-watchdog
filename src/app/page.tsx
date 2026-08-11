@@ -63,6 +63,12 @@ export default function Home() {
           <Link href="/register" className="text-sm underline underline-offset-4">
             Регистрация
           </Link>
+          <Link
+            href="/dashboard/feedback"
+            className="text-sm underline underline-offset-4"
+          >
+            Обратная связь
+          </Link>
         </div>
       </section>
 

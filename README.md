@@ -21,6 +21,7 @@ B2B Micro-SaaS для мониторинга изменений на сайта�
 | `src/lib/checkWorker.ts` | Оркестрация проверок с учётом лимитов тарифа |
 | `src/app/api/cron/check/route.ts` | Cron-эндпоинт запуска воркера |
 | `src/app/dashboard` | Дашборд: список сайтов, форма добавления, история проверок |
+| `src/app/dashboard/feedback` | Обратная связь: форма отзыва и уведомление админу в Telegram |
 | `src/auth.ts`, `src/app/(auth)` | Авторизация: конфиг Auth.js, страницы `/login` и `/register` |
 
 ## Запуск

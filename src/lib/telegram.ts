@@ -1,4 +1,5 @@
-const TELEGRAM_API_BASE = "https://api.telegram.org";
+const TELEGRAM_API_BASE =
+  process.env.TELEGRAM_API_BASE ?? "https://api.telegram.org";
 
 export class TelegramError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
