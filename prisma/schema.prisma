@@ -12,6 +12,7 @@ model User {
   email              String        @unique
   passwordHash       String
   subscriptionStatus String        @default("free") // free, premium
+  telegramChatId     String?
   createdAt          DateTime      @default(now())
   sites              WatchedSite[]
 }
