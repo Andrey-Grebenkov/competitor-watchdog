@@ -50,12 +50,20 @@ export default function Home() {
           промо-баннеры и наличие товаров. Беспилотный браузер снимает страницы
           по расписанию, а Vision AI объясняет, что именно изменилось.
         </p>
-        <Link
-          href="/dashboard"
-          className="rounded-md bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500"
-        >
-          Перейти в дашборд
-        </Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="rounded-md bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500"
+          >
+            Перейти в дашборд
+          </Link>
+          <Link href="/login" className="text-sm underline underline-offset-4">
+            Войти
+          </Link>
+          <Link href="/register" className="text-sm underline underline-offset-4">
+            Регистрация
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-6 sm:grid-cols-3">

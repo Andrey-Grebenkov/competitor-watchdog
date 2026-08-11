@@ -7,6 +7,7 @@ B2B Micro-SaaS для мониторинга изменений на сайта�
 - Next.js (App Router), TypeScript, Tailwind CSS
 - PostgreSQL + Prisma ORM
 - Playwright (headless + stealth-маскировка)
+- Auth.js (NextAuth v5) + Prisma-адаптер, Credentials-провайдер с bcrypt
 - OpenAI Vision (structured JSON output)
 - Telegram Bot API для алертов
 
@@ -20,13 +21,14 @@ B2B Micro-SaaS для мониторинга изменений на сайта�
 | `src/lib/checkWorker.ts` | Оркестрация проверок с учётом лимитов тарифа |
 | `src/app/api/cron/check/route.ts` | Cron-эндпоинт запуска воркера |
 | `src/app/dashboard` | Дашборд: список сайтов, форма добавления, история проверок |
+| `src/auth.ts`, `src/app/(auth)` | Авторизация: конфиг Auth.js, страницы `/login` и `/register` |
 
 ## Запуск
 
 ```bash
 npm install
 npx playwright install chromium
-cp .env.example .env   # заполнить DATABASE_URL, OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
+cp .env.example .env   # заполнить DATABASE_URL, AUTH_SECRET, OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
 npx prisma migrate dev
 npm run dev
 ```

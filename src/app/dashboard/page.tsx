@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { signOutUser } from "@/app/(auth)/actions";
 import { PLAN_LIMITS, type PlanName } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
@@ -17,18 +19,7 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
 
   if (!user) {
-    return (
-      <main className="mx-auto max-w-4xl px-6 py-16">
-        <h1 className="text-2xl font-semibold">Дашборд</h1>
-        <p className="mt-4 text-sm text-black/70 dark:text-white/70">
-          Пользователь не найден. Создайте пользователя в базе или задайте
-          <code className="mx-1 rounded bg-black/5 px-1 dark:bg-white/10">
-            DEMO_USER_EMAIL
-          </code>
-          в окружении.
-        </p>
-      </main>
-    );
+    redirect("/login");
   }
 
   const planName: PlanName =
@@ -54,9 +45,16 @@ export default async function DashboardPage() {
             сайтов · минимальный интервал {plan.minIntervalHours} ч
           </p>
         </div>
-        <Link href="/" className="text-sm underline underline-offset-4">
-          На главную
-        </Link>
+        <div className="flex items-center gap-4 text-sm">
+          <Link href="/" className="underline underline-offset-4">
+            На главную
+          </Link>
+          <form action={signOutUser}>
+            <button type="submit" className="underline underline-offset-4">
+              Выйти
+            </button>
+          </form>
+        </div>
       </header>
 
       <section className="mt-8">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 
@@ -19,7 +19,7 @@ export default async function SiteHistoryPage({
   const { siteId } = await params;
   const user = await getCurrentUser();
   if (!user) {
-    notFound();
+    redirect("/login");
   }
 
   const site = await prisma.watchedSite.findFirst({
