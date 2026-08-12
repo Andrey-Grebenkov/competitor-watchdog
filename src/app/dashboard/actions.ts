@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { PLAN_LIMITS, type PlanName } from "@/lib/checkWorker";
+import { performSiteCheck } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { getUserQuota } from "@/lib/quota";
 
 export interface AddSiteValues {
   name: string;
@@ -15,6 +16,8 @@ export interface AddSiteValues {
 export interface AddSiteState {
   error?: string;
   success?: boolean;
+  /** Сайт создан, но первая проверка отложена — что сообщить пользователю. */
+  notice?: string;
   /** Введённые значения, чтобы форма не терялась при ошибке. */
   values?: AddSiteValues;
 }
@@ -67,34 +70,46 @@ export async function addSite(
     };
   }
 
-  const plan =
-    PLAN_LIMITS[
-      (user.subscriptionStatus as PlanName) in PLAN_LIMITS
-        ? (user.subscriptionStatus as PlanName)
-        : "free"
-    ];
-
-  const existingCount = await prisma.watchedSite.count({
-    where: { userId: user.id },
-  });
-  if (existingCount >= plan.maxSites) {
+  const quota = await getUserQuota(user);
+  if (quota.sitesExhausted) {
     return {
-      error: `Достигнут лимит тарифа: ${plan.maxSites} сайтов`,
+      error: `Достигнут лимит тарифа: ${quota.limits.maxSites} сайтов`,
       values,
     };
   }
 
-  await prisma.watchedSite.create({
+  const site = await prisma.watchedSite.create({
     data: {
       userId: user.id,
       name,
       url,
       cssSelector: cssSelector || null,
-      checkIntervalHours: Math.max(checkIntervalHours, plan.minIntervalHours),
+      checkIntervalHours: Math.max(
+        checkIntervalHours,
+        quota.limits.minIntervalHours,
+      ),
     },
   });
 
   revalidatePath("/dashboard");
+
+  if (quota.dailyChecksExhausted) {
+    return {
+      success: true,
+      notice: `Сайт добавлен, но суточный лимит проверок (${quota.checksUsed}/${quota.limits.maxDailyChecks}) на сегодня исчерпан. Следующая проверка пройдёт по расписанию завтра`,
+    };
+  }
+
+  const result = await performSiteCheck({ ...site, user });
+  revalidatePath("/dashboard");
+
+  if (result.status === "failed") {
+    return {
+      success: true,
+      notice: `Сайт добавлен, но первый скриншот не удалось снять: ${result.error ?? "неизвестная ошибка"}`,
+    };
+  }
+
   return { success: true };
 }
 

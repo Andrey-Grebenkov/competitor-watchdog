@@ -78,7 +78,10 @@ export function AddSiteForm() {
         {state.error ? (
           <p className="mt-3 text-sm text-red-600">{state.error}</p>
         ) : null}
-        {state.success ? (
+        {state.notice ? (
+          <p className="mt-3 text-sm text-amber-600">{state.notice}</p>
+        ) : null}
+        {state.success && !state.notice ? (
           <p className="mt-3 text-sm text-green-600">Сайт добавлен</p>
         ) : null}
       </div>

@@ -2,40 +2,30 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ghostButtonDanger } from "@/lib/ui";
+import { ghostButton } from "@/lib/ui";
 
-export function DeleteSiteButton({
-  siteId,
-  siteName,
-}: {
-  siteId: string;
-  siteName: string;
-}) {
+export function CheckNowButton({ siteId }: { siteId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleClick = async () => {
-    if (!window.confirm(`Удалить «${siteName}» и всю историю проверок?`)) {
-      return;
-    }
-
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(`/api/sites/${siteId}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/sites/${siteId}/check`, {
+        method: "POST",
       });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        setError(body?.error ?? "Не удалось удалить сайт");
+        setError(body?.error ?? "Не удалось выполнить проверку");
         return;
       }
       router.refresh();
     } catch {
-      setError("Не удалось удалить сайт");
+      setError("Не удалось выполнить проверку");
     } finally {
       setPending(false);
     }
@@ -47,9 +37,9 @@ export function DeleteSiteButton({
         type="button"
         onClick={handleClick}
         disabled={pending}
-        className={`${ghostButtonDanger} whitespace-nowrap`}
+        className={`${ghostButton} whitespace-nowrap`}
       >
-        {pending ? "Удаляем…" : "Удалить"}
+        {pending ? "Проверяем…" : "Проверить сейчас"}
       </button>
       {error ? (
         <span className="px-3 text-xs text-red-600">{error}</span>

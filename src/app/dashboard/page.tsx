@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOutUser } from "@/app/(auth)/actions";
-import { PLAN_LIMITS, type PlanName } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { getUserQuota } from "@/lib/quota";
 import { badge, card, ghostButton, ghostButtonWarning } from "@/lib/ui";
 import { AddSiteForm } from "./AddSiteForm";
+import { CheckNowButton } from "./CheckNowButton";
 import { DeleteSiteButton } from "./DeleteSiteButton";
 import { toggleSite } from "./actions";
 
@@ -24,9 +25,7 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const planName: PlanName =
-    user.subscriptionStatus === "premium" ? "premium" : "free";
-  const plan = PLAN_LIMITS[planName];
+  const quota = await getUserQuota(user);
 
   const sites = await prisma.watchedSite.findMany({
     where: { userId: user.id },
@@ -43,8 +42,11 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold">Отслеживаемые сайты</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
-            {user.email} · тариф {planName} · {sites.length}/{plan.maxSites}{" "}
-            сайтов · минимальный интервал {plan.minIntervalHours} ч
+            {user.email} · Тариф{" "}
+            {quota.planName === "premium" ? "Premium" : "Free"} · Сайты:{" "}
+            {quota.sitesUsed}/{quota.limits.maxSites} · Проверки сегодня:{" "}
+            {quota.checksUsed}/{quota.limits.maxDailyChecks} · минимальный
+            интервал {quota.limits.minIntervalHours} ч
           </p>
         </div>
         <nav className="flex items-center gap-1">
@@ -115,7 +117,7 @@ export default async function DashboardPage() {
                     </td>
                     <td className="px-4 py-3">{site._count.history}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-start gap-1">
                         <Link
                           href={`/dashboard/sites/${site.id}`}
                           className={ghostButton}
@@ -128,6 +130,7 @@ export default async function DashboardPage() {
                             {site.isActive ? "Пауза" : "Включить"}
                           </button>
                         </form>
+                        <CheckNowButton siteId={site.id} />
                         <DeleteSiteButton
                           siteId={site.id}
                           siteName={site.name}

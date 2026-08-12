@@ -1,6 +1,8 @@
 import type { User, WatchedSite } from "@prisma/client";
 import { analyzeScreenshots, type AnalysisResult } from "@/lib/aiAnalyzer";
+import { planFor } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { getUserDailyChecksCount } from "@/lib/quota";
 import { captureScreenshot } from "@/lib/scraper";
 import {
   escapeHtml,
@@ -8,15 +10,13 @@ import {
   sendTelegramMessage,
 } from "@/lib/telegram";
 
-export const PLAN_LIMITS = {
-  free: { maxSites: 2, minIntervalHours: 24 },
-  premium: { maxSites: 25, minIntervalHours: 1 },
-} as const;
-
-export type PlanName = keyof typeof PLAN_LIMITS;
+export { PLAN_LIMITS, planFor, planNameFor, type PlanName } from "@/lib/plans";
 
 export type SkipReason =
-  "plan_site_limit" | "interval_not_elapsed" | "no_baseline";
+  | "plan_site_limit"
+  | "daily_check_limit"
+  | "interval_not_elapsed"
+  | "no_baseline";
 
 export interface SiteCheckResult {
   siteId: string;
@@ -34,12 +34,6 @@ export interface WorkerRunResult {
 }
 
 type SiteWithUser = WatchedSite & { user: User };
-
-export function planFor(user: User): (typeof PLAN_LIMITS)[PlanName] {
-  return user.subscriptionStatus === "premium"
-    ? PLAN_LIMITS.premium
-    : PLAN_LIMITS.free;
-}
 
 export function effectiveIntervalHours(site: WatchedSite, user: User): number {
   const { minIntervalHours } = planFor(user);
@@ -80,32 +74,18 @@ function formatAlert(site: WatchedSite, analysis: AnalysisResult): string {
     .join("\n");
 }
 
-async function checkSite(
+/**
+ * Снимает страницу, сравнивает с предыдущим снимком и записывает результат
+ * в CheckHistory без проверки лимитов и интервала — вызывающая сторона решает,
+ * разрешена ли проверка.
+ */
+export async function performSiteCheck(
   site: SiteWithUser,
-  allowedSiteIds: Set<string>,
-  now: Date,
 ): Promise<SiteCheckResult> {
-  if (!allowedSiteIds.has(site.id)) {
-    return {
-      siteId: site.id,
-      status: "skipped",
-      skipReason: "plan_site_limit",
-    };
-  }
-
   const lastCheck = await prisma.checkHistory.findFirst({
     where: { siteId: site.id },
     orderBy: { checkedAt: "desc" },
   });
-
-  const intervalHours = effectiveIntervalHours(site, site.user);
-  if (!isIntervalElapsed(lastCheck?.checkedAt, intervalHours, now)) {
-    return {
-      siteId: site.id,
-      status: "skipped",
-      skipReason: "interval_not_elapsed",
-    };
-  }
 
   try {
     const { screenshotPath } = await captureScreenshot({
@@ -160,6 +140,48 @@ async function checkSite(
   }
 }
 
+async function checkSite(
+  site: SiteWithUser,
+  allowedSiteIds: Set<string>,
+  dailyChecksLeft: Map<string, number>,
+  now: Date,
+): Promise<SiteCheckResult> {
+  if (!allowedSiteIds.has(site.id)) {
+    return {
+      siteId: site.id,
+      status: "skipped",
+      skipReason: "plan_site_limit",
+    };
+  }
+
+  const lastCheck = await prisma.checkHistory.findFirst({
+    where: { siteId: site.id },
+    orderBy: { checkedAt: "desc" },
+    select: { checkedAt: true },
+  });
+
+  const intervalHours = effectiveIntervalHours(site, site.user);
+  if (!isIntervalElapsed(lastCheck?.checkedAt, intervalHours, now)) {
+    return {
+      siteId: site.id,
+      status: "skipped",
+      skipReason: "interval_not_elapsed",
+    };
+  }
+
+  const checksLeft = dailyChecksLeft.get(site.userId) ?? 0;
+  if (checksLeft <= 0) {
+    return {
+      siteId: site.id,
+      status: "skipped",
+      skipReason: "daily_check_limit",
+    };
+  }
+  dailyChecksLeft.set(site.userId, checksLeft - 1);
+
+  return performSiteCheck(site);
+}
+
 export async function runCheckWorker(
   now = new Date(),
 ): Promise<WorkerRunResult> {
@@ -181,9 +203,18 @@ export async function runCheckWorker(
     }
   }
 
+  const dailyChecksLeft = new Map<string, number>();
+  for (const site of sites) {
+    if (dailyChecksLeft.has(site.userId)) {
+      continue;
+    }
+    const used = await getUserDailyChecksCount(site.userId, now);
+    dailyChecksLeft.set(site.userId, planFor(site.user).maxDailyChecks - used);
+  }
+
   const results: SiteCheckResult[] = [];
   for (const site of sites) {
-    results.push(await checkSite(site, allowedSiteIds, now));
+    results.push(await checkSite(site, allowedSiteIds, dailyChecksLeft, now));
   }
 
   return { startedAt, finishedAt: new Date(), results };
