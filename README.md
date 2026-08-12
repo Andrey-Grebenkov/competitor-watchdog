@@ -8,7 +8,7 @@ B2B Micro-SaaS для мониторинга изменений на сайта�
 - PostgreSQL + Prisma ORM
 - Playwright (headless + stealth-маскировка)
 - Auth.js (NextAuth v5) + Prisma-адаптер, Credentials-провайдер с bcrypt
-- OpenAI Vision (structured JSON output)
+- Google Gemini Vision (REST `generateContent`, JSON-ответ по схеме)
 - Telegram Bot API для алертов
 
 ## Структура
@@ -29,7 +29,7 @@ B2B Micro-SaaS для мониторинга изменений на сайта�
 ```bash
 npm install
 npx playwright install chromium
-cp .env.example .env   # заполнить DATABASE_URL, AUTH_SECRET, OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
+cp .env.example .env   # заполнить DATABASE_URL, AUTH_SECRET, GEMINI_API_KEY, TELEGRAM_BOT_TOKEN
 npx prisma migrate dev
 npm run dev
 ```
@@ -66,14 +66,18 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chec
 
 ## Vision-модель
 
-`src/lib/aiAnalyzer.ts` работает через OpenAI SDK, но по умолчанию обращается к
-OpenAI-совместимому endpoint Gemini
-(`https://generativelanguage.googleapis.com/v1beta/openai/`, модель
-`gemini-1.5-flash`). Переопределяется через `OPENAI_BASE_URL` и
-`OPENAI_VISION_MODEL` (для OpenAI: `https://api.openai.com/v1` + `gpt-4o`).
-Детали ошибки провайдера пишутся в консоль как `Vision API Error Details:`, а при
-401/403 или «API key not valid» в UI возвращается «Ошибка авторизации: проверьте
-OPENAI_API_KEY и OPENAI_BASE_URL в .env».
+`src/lib/aiAnalyzer.ts` вызывает Gemini напрямую через `fetch`:
+`POST {GEMINI_API_BASE}/models/{GEMINI_MODEL}:generateContent` с ключом в заголовке
+`x-goog-api-key`, скриншоты передаются как `inlineData` (base64 PNG), ответ
+запрашивается с `generationConfig.responseMimeType = "application/json"` и
+`responseSchema`. Затем `JSON.parse` (с отбрасыванием markdown-обёртки) и
+`analysisSchema.parse`. Дефолты: `https://generativelanguage.googleapis.com/v1beta`
+и `gemini-1.5-flash`; ключ — `GEMINI_API_KEY` или (для совместимости) `OPENAI_API_KEY`.
+
+Любая ошибка провайдера логируется как `Vision API Error Details:` и приходит в UI
+текстом: при 401/403 или «API key not valid» — «Ошибка авторизации: проверьте
+GEMINI_API_KEY…», при 404/500 — «Vision API вернул ошибку <код>: …», при порче
+ответа — «Vision API вернул невалидный JSON: …». HTTP-код самого `/check` остаётся 200.
 
 ## Ошибки проверки
 
@@ -90,10 +94,6 @@ OPENAI_API_KEY и OPENAI_BASE_URL в .env».
 `POST /api/sites/[siteId]/check` при таком сбое отвечает 200 с
 `{ ok: false, failedStage, error }` — 502 больше не возвращается, UI показывает
 текст ошибки под кнопкой «Проверить сейчас».
-
-Разбор ответа модели: запрос идёт через `chat.completions.create` с
-`response_format: { type: "json_object" }` (совместимо с Gemini), затем
-`JSON.parse` (с отбрасыванием markdown-обёртки) и `analysisSchema.parse`.
 
 ## Скриншоты и дифф
 
