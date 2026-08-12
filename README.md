@@ -74,10 +74,15 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chec
 `analysisSchema.parse`. Дефолты: `https://generativelanguage.googleapis.com/v1beta`
 и `gemini-1.5-flash`; ключ — `GEMINI_API_KEY` или (для совместимости) `OPENAI_API_KEY`.
 
+Если ответ модели пуст, обёрнут в ```json или не разбирается схемой, сырой текст
+логируется как `Gemini Raw Response:`, а проверка завершается успешно с вердиктом
+«Не удалось распарсить текстовый ответ от ИИ.» (`UNPARSEABLE_ANALYSIS`) — пайплайн
+не ломается. Ошибки самого HTTP-запроса по-прежнему считаются сбоем этапа анализа.
+
 Любая ошибка провайдера логируется как `Vision API Error Details:` и приходит в UI
 текстом: при 401/403 или «API key not valid» — «Ошибка авторизации: проверьте
-GEMINI_API_KEY…», при 404/500 — «Vision API вернул ошибку <код>: …», при порче
-ответа — «Vision API вернул невалидный JSON: …». HTTP-код самого `/check` остаётся 200.
+GEMINI_API_KEY…», при 404/500 — «Vision API вернул ошибку <код>: …». HTTP-код
+самого `/check` остаётся 200.
 
 ## Ошибки проверки
 

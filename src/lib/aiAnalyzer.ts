@@ -96,10 +96,27 @@ const geminiResponseSchema = z.object({
     .optional(),
 });
 
-/** Убирает markdown-обёртку ```json ... ```, которую иногда добавляет модель. */
-function stripCodeFence(content: string): string {
-  const fenced = content.trim().match(/^```(?:json)?\s*([\s\S]*?)```$/i);
-  return (fenced ? fenced[1] : content).trim();
+/**
+ * Вердикт на случай, когда ответ модели пуст или не разбирается: проверка
+ * завершается успешно и пайплайн не ломается.
+ */
+export const UNPARSEABLE_ANALYSIS: AnalysisResult = {
+  hasChanges: false,
+  summary: "Не удалось распарсить текстовый ответ от ИИ.",
+  urgency: "low",
+  changes: [],
+};
+
+/**
+ * Готовит текст к `JSON.parse`: снимает markdown-обёртку ```json ... ``` (даже
+ * если вокруг есть пояснения) и убирает непечатаемые управляющие символы.
+ */
+function cleanJsonText(content: string): string {
+  const withoutControls = content
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufeff]/g, "")
+    .trim();
+  const fenced = withoutControls.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (fenced ? fenced[1] : withoutControls).trim();
 }
 
 function isAuthMessage(message: string): boolean {
@@ -172,15 +189,31 @@ export async function analyzeScreenshots(
   }
 
   const rawBody = await response.text();
+  if (!rawBody || !rawBody.trim()) {
+    console.error("Gemini Raw Response:", rawBody);
+    if (!response.ok) {
+      throw new AiAnalysisError(
+        `Vision API вернул ошибку ${response.status} без тела ответа`,
+      );
+    }
+    return UNPARSEABLE_ANALYSIS;
+  }
+
   let body: z.infer<typeof geminiResponseSchema>;
   try {
-    body = geminiResponseSchema.parse(JSON.parse(rawBody));
+    // Конверт от Google — обычный JSON; чистка нужна только для текста модели,
+    // иначе fence внутри строки ответа сломает разбор конверта.
+    body = geminiResponseSchema.parse(JSON.parse(rawBody.trim()));
   } catch (error) {
-    console.error("Vision API Error Details:", error, rawBody.slice(0, 500));
-    throw new AiAnalysisError(
-      `Vision API вернул неожиданный ответ: ${rawBody.slice(0, 200)}`,
-      { cause: error },
-    );
+    console.error("Vision API Error Details:", error);
+    console.error("Gemini Raw Response:", rawBody);
+    if (!response.ok) {
+      throw new AiAnalysisError(
+        `Vision API вернул ошибку ${response.status}: ${rawBody.slice(0, 200)}`,
+        { cause: error },
+      );
+    }
+    return UNPARSEABLE_ANALYSIS;
   }
 
   if (!response.ok || body.error) {
@@ -208,27 +241,25 @@ export async function analyzeScreenshots(
     .join("")
     .trim();
   if (!text) {
-    throw new AiAnalysisError("Vision API вернул пустой ответ");
+    console.error("Gemini Raw Response:", rawBody);
+    return UNPARSEABLE_ANALYSIS;
   }
 
   let payload: unknown;
   try {
-    payload = JSON.parse(stripCodeFence(text));
+    payload = JSON.parse(cleanJsonText(text));
   } catch (error) {
-    console.error("Vision API Error Details:", error, text.slice(0, 500));
-    throw new AiAnalysisError(
-      `Vision API вернул невалидный JSON: ${text.slice(0, 200)}`,
-      { cause: error },
-    );
+    console.error("Vision API Error Details:", error);
+    console.error("Gemini Raw Response:", text);
+    return UNPARSEABLE_ANALYSIS;
   }
 
-  try {
-    return analysisSchema.parse(payload);
-  } catch (error) {
-    console.error("Vision API Error Details:", error, payload);
-    throw new AiAnalysisError(
-      `Ответ Vision API не соответствует ожидаемой схеме: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
+  const validated = analysisSchema.safeParse(payload);
+  if (!validated.success) {
+    console.error("Vision API Error Details:", validated.error);
+    console.error("Gemini Raw Response:", text);
+    return UNPARSEABLE_ANALYSIS;
   }
+
+  return validated.data;
 }
