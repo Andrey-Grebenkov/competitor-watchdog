@@ -75,6 +75,18 @@ OpenAI-совместимому endpoint Gemini
 401/403 или «API key not valid» в UI возвращается «Ошибка авторизации: проверьте
 OPENAI_API_KEY и OPENAI_BASE_URL в .env».
 
+## Ошибки проверки
+
+`performSiteCheck` разделяет этапы и возвращает `failedStage`:
+
+- `screenshot` — Playwright не смог открыть страницу или снять снимок. Детали
+  логируются как `Playwright Error Details:`, в UI приходит «Ошибка загрузки сайта
+  (Playwright): …» (`ScrapeError` из `src/lib/scraper.ts`).
+- `analysis` — сбой Vision API (`AiAnalysisError`, лог `Vision API Error Details:`).
+- `persist` — сбой записи в БД или отправки алерта.
+
+Сбой скрапинга никогда не подменяется сообщением про Vision API и наоборот.
+
 ## Скриншоты и дифф
 
 Снимки лежат в `/tmp/screenshots` и отдаются клиенту через

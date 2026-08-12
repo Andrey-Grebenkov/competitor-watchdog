@@ -109,7 +109,7 @@ export async function addSite(
   if (result.status === "failed") {
     return {
       success: true,
-      notice: `Сайт добавлен, но первый скриншот не удалось снять: ${result.error ?? "неизвестная ошибка"}`,
+      notice: `Сайт добавлен, но эталонный снимок не удалось сделать. ${result.error ?? "Неизвестная ошибка"}`,
     };
   }
 

@@ -1,10 +1,14 @@
 import type { User, WatchedSite } from "@prisma/client";
-import { analyzeScreenshots, type AnalysisResult } from "@/lib/aiAnalyzer";
+import {
+  analyzeScreenshots,
+  AiAnalysisError,
+  type AnalysisResult,
+} from "@/lib/aiAnalyzer";
 import { createDiffImage } from "@/lib/imageDiff";
 import { planFor, planNameFor } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { getUserDailyChecksCount } from "@/lib/quota";
-import { captureScreenshot } from "@/lib/scraper";
+import { captureScreenshot, ScrapeError } from "@/lib/scraper";
 import {
   escapeHtml,
   isTelegramConfigured,
@@ -19,6 +23,9 @@ export type SkipReason =
   | "interval_not_elapsed"
   | "no_baseline";
 
+/** Этап, на котором проверка упала. */
+export type FailedStage = "screenshot" | "analysis" | "persist";
+
 export interface SiteCheckResult {
   siteId: string;
   status: "analyzed" | "skipped" | "failed";
@@ -26,6 +33,7 @@ export interface SiteCheckResult {
   alertSent?: boolean;
   analysis?: AnalysisResult;
   error?: string;
+  failedStage?: FailedStage;
 }
 
 export interface WorkerRunResult {
@@ -114,12 +122,25 @@ export async function performSiteCheck(
     orderBy: { checkedAt: "desc" },
   });
 
+  let screenshotPath: string;
   try {
-    const { screenshotPath } = await captureScreenshot({
+    ({ screenshotPath } = await captureScreenshot({
       url: site.url,
       cssSelector: site.cssSelector,
-    });
+    }));
+  } catch (error) {
+    return {
+      siteId: site.id,
+      status: "failed",
+      failedStage: "screenshot",
+      error:
+        error instanceof ScrapeError
+          ? error.message
+          : `Ошибка загрузки сайта (Playwright): ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 
+  try {
     if (!lastCheck) {
       await prisma.$transaction([
         prisma.checkHistory.create({
@@ -145,10 +166,23 @@ export async function performSiteCheck(
       screenshotPath,
     ).catch(() => null);
 
-    const analysis = await analyzeScreenshots(
-      lastCheck.screenshotUrl,
-      screenshotPath,
-    );
+    let analysis: AnalysisResult;
+    try {
+      analysis = await analyzeScreenshots(
+        lastCheck.screenshotUrl,
+        screenshotPath,
+      );
+    } catch (error) {
+      return {
+        siteId: site.id,
+        status: "failed",
+        failedStage: "analysis",
+        error:
+          error instanceof AiAnalysisError
+            ? error.message
+            : `Ошибка анализа ИИ (Vision API): ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
 
     await prisma.checkHistory.create({
       data: {
@@ -179,9 +213,11 @@ export async function performSiteCheck(
 
     return { siteId: site.id, status: "analyzed", analysis, alertSent };
   } catch (error) {
+    console.error("Check Persist Error Details:", error);
     return {
       siteId: site.id,
       status: "failed",
+      failedStage: "persist",
       error: error instanceof Error ? error.message : String(error),
     };
   }

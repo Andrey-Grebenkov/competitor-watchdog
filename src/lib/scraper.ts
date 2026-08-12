@@ -18,6 +18,14 @@ export interface CaptureOptions {
   timeoutMs?: number;
 }
 
+/** Сбой на этапе снятия скриншота (навигация, таймаут, селектор). */
+export class ScrapeError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ScrapeError";
+  }
+}
+
 export interface CaptureResult {
   screenshotPath: string;
   capturedAt: Date;
@@ -82,6 +90,13 @@ export async function captureScreenshot({
       capturedAt: new Date(),
       usedSelector: Boolean(cssSelector),
     };
+  } catch (error) {
+    console.error("Playwright Error Details:", error);
+    const details = error instanceof Error ? error.message : String(error);
+    throw new ScrapeError(
+      `Ошибка загрузки сайта (Playwright): ${details.split("\n")[0]}`,
+      { cause: error },
+    );
   } finally {
     await browser?.close();
   }
