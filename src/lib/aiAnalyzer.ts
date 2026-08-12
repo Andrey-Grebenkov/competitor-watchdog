@@ -3,7 +3,20 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
-export const VISION_MODEL = process.env.OPENAI_VISION_MODEL ?? "gpt-4o";
+/** OpenAI-совместимый endpoint Gemini используется по умолчанию. */
+export const DEFAULT_VISION_BASE_URL =
+  "https://generativelanguage.googleapis.com/v1beta/openai/";
+
+export const DEFAULT_VISION_MODEL = "gemini-1.5-flash";
+
+export const VISION_MODEL =
+  process.env.OPENAI_VISION_MODEL?.trim() || DEFAULT_VISION_MODEL;
+
+export const VISION_BASE_URL =
+  process.env.OPENAI_BASE_URL?.trim() || DEFAULT_VISION_BASE_URL;
+
+export const AUTH_ERROR_MESSAGE =
+  "Ошибка авторизации: проверьте OPENAI_API_KEY и OPENAI_BASE_URL в .env";
 
 export const changeSchema = z.object({
   type: z.string(),
@@ -34,6 +47,19 @@ Report only meaningful commercial changes (prices, discounts, promo banners, sto
 Set urgency to "high" only for price changes or new promo campaigns, "medium" for stock or layout changes affecting offers, "low" otherwise.
 When nothing meaningful changed, set hasChanges to false, changes to an empty array and summary to a short explanation.`;
 
+/** Ошибка ключа/доступа: статус 401/403 или явное сообщение провайдера. */
+function isAuthError(error: unknown): boolean {
+  if (error instanceof OpenAI.APIError) {
+    if (error.status === 401 || error.status === 403) {
+      return true;
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /api key not valid|invalid api key|api_key_invalid|unauthorized|permission denied/i.test(
+    message,
+  );
+}
+
 async function toDataUrl(filePath: string): Promise<string> {
   try {
     const buffer = await readFile(filePath);
@@ -49,9 +75,9 @@ export async function analyzeScreenshots(
   oldPath: string,
   newPath: string,
 ): Promise<AnalysisResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
-    throw new AiAnalysisError("OPENAI_API_KEY is not set");
+    throw new AiAnalysisError(AUTH_ERROR_MESSAGE);
   }
 
   const [previousImage, currentImage] = await Promise.all([
@@ -59,10 +85,7 @@ export async function analyzeScreenshots(
     toDataUrl(newPath),
   ]);
 
-  const client = new OpenAI({
-    apiKey,
-    baseURL: process.env.OPENAI_BASE_URL || undefined,
-  });
+  const client = new OpenAI({ apiKey, baseURL: VISION_BASE_URL });
 
   let completion;
   try {
@@ -83,6 +106,10 @@ export async function analyzeScreenshots(
       ],
     });
   } catch (error) {
+    console.error("Vision API Error Details:", error);
+    if (isAuthError(error)) {
+      throw new AiAnalysisError(AUTH_ERROR_MESSAGE, { cause: error });
+    }
     throw new AiAnalysisError("Vision API request failed", { cause: error });
   }
 

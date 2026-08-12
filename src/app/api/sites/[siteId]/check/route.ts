@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { AUTH_ERROR_MESSAGE } from "@/lib/aiAnalyzer";
 import { performSiteCheck } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
@@ -32,10 +33,11 @@ export async function POST(
   revalidatePath("/dashboard");
 
   if (result.status === "failed") {
-    return Response.json(
-      { error: `Проверка не удалась: ${result.error ?? "неизвестная ошибка"}` },
-      { status: 502 },
-    );
+    const error =
+      result.error === AUTH_ERROR_MESSAGE
+        ? AUTH_ERROR_MESSAGE
+        : `Проверка не удалась: ${result.error ?? "неизвестная ошибка"}`;
+    return Response.json({ error }, { status: 502 });
   }
 
   return Response.json({

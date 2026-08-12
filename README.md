@@ -64,6 +64,17 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chec
 показывается в истории как «Эталонный снимок»; в строке сайта на дашборде видно
 время до следующей плановой проверки.
 
+## Vision-модель
+
+`src/lib/aiAnalyzer.ts` работает через OpenAI SDK, но по умолчанию обращается к
+OpenAI-совместимому endpoint Gemini
+(`https://generativelanguage.googleapis.com/v1beta/openai/`, модель
+`gemini-1.5-flash`). Переопределяется через `OPENAI_BASE_URL` и
+`OPENAI_VISION_MODEL` (для OpenAI: `https://api.openai.com/v1` + `gpt-4o`).
+Детали ошибки провайдера пишутся в консоль как `Vision API Error Details:`, а при
+401/403 или «API key not valid» в UI возвращается «Ошибка авторизации: проверьте
+OPENAI_API_KEY и OPENAI_BASE_URL в .env».
+
 ## Скриншоты и дифф
 
 Снимки лежат в `/tmp/screenshots` и отдаются клиенту через
