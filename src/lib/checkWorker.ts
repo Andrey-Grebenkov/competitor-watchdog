@@ -1,5 +1,6 @@
 import type { User, WatchedSite } from "@prisma/client";
 import { analyzeScreenshots, type AnalysisResult } from "@/lib/aiAnalyzer";
+import { createDiffImage } from "@/lib/imageDiff";
 import { planFor, planNameFor } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { getUserDailyChecksCount } from "@/lib/quota";
@@ -139,6 +140,11 @@ export async function performSiteCheck(
       return { siteId: site.id, status: "skipped", skipReason: "no_baseline" };
     }
 
+    const diff = await createDiffImage(
+      lastCheck.screenshotUrl,
+      screenshotPath,
+    ).catch(() => null);
+
     const analysis = await analyzeScreenshots(
       lastCheck.screenshotUrl,
       screenshotPath,
@@ -148,6 +154,8 @@ export async function performSiteCheck(
       data: {
         siteId: site.id,
         screenshotUrl: screenshotPath,
+        diffImageUrl: diff?.diffPath ?? null,
+        diffRatio: diff?.diffRatio ?? null,
         aiSummary: analysis.summary,
         isAlertTriggered: analysis.hasChanges,
       },

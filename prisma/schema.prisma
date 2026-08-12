@@ -107,6 +107,10 @@ model CheckHistory {
   siteId           String
   site             WatchedSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
   screenshotUrl    String
+  /// PNG с подсветкой пиксельных различий с предыдущим снимком.
+  diffImageUrl     String?
+  /// Доля изменившихся пикселей относительно предыдущего снимка (0..1).
+  diffRatio        Float?
   aiSummary        String?
   isAlertTriggered Boolean     @default(false)
   isBaseline       Boolean     @default(false)

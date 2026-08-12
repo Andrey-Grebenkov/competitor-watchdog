@@ -1,8 +1,10 @@
+import path from "node:path";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { badge, card, ghostButton } from "@/lib/ui";
+import { ScreenshotGallery, type ScreenshotItem } from "./ScreenshotGallery";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,10 @@ const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
   timeStyle: "short",
   timeZone: "UTC",
 });
+
+function screenshotSrc(filePath: string): string {
+  return `/api/screenshots/${encodeURIComponent(path.basename(filePath))}`;
+}
 
 export default async function SiteHistoryPage({
   params,
@@ -52,39 +58,60 @@ export default async function SiteHistoryPage({
             Проверок пока не было.
           </p>
         ) : (
-          site.history.map((check) => (
-            <article key={check.id} className={`p-4 ${card}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {check.isBaseline ? (
-                  <span className={badge.accent}>Эталонный снимок</span>
-                ) : (
-                  <span
-                    className={
-                      check.isAlertTriggered ? badge.alert : badge.neutral
-                    }
-                  >
-                    {check.isAlertTriggered
-                      ? "есть изменения"
-                      : "без изменений"}
-                  </span>
-                )}
-                <time className="text-xs text-black/50 dark:text-white/50">
-                  {dateFormatter.format(check.checkedAt)}
-                </time>
-              </div>
+          site.history.map((check) => {
+            const items: ScreenshotItem[] = [
+              {
+                src: screenshotSrc(check.screenshotUrl),
+                label: check.isBaseline
+                  ? "Эталонный снимок"
+                  : "Текущее состояние",
+              },
+            ];
+            if (check.diffImageUrl) {
+              items.push({
+                src: screenshotSrc(check.diffImageUrl),
+                label: "Подсветка различий",
+              });
+            }
 
-              <p className="mt-3 text-sm">
-                {check.aiSummary ??
-                  (check.isBaseline
-                    ? "Эталонный снимок — точка отсчёта для будущих сравнений."
-                    : "Вердикт ИИ отсутствует.")}
-              </p>
+            return (
+              <article key={check.id} className={`p-4 ${card}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {check.isBaseline ? (
+                    <span className={badge.accent}>Эталонный снимок</span>
+                  ) : (
+                    <span
+                      className={
+                        check.isAlertTriggered ? badge.alert : badge.success
+                      }
+                    >
+                      {check.isAlertTriggered
+                        ? "есть изменения"
+                        : "Изменений не обнаружено"}
+                    </span>
+                  )}
+                  <time className="text-xs text-black/50 dark:text-white/50">
+                    {dateFormatter.format(check.checkedAt)}
+                  </time>
+                </div>
 
-              <p className="mt-2 text-xs break-all text-black/40 dark:text-white/40">
-                {check.screenshotUrl}
-              </p>
-            </article>
-          ))
+                <ScreenshotGallery items={items} />
+
+                {check.diffRatio !== null && !check.isBaseline ? (
+                  <p className="mt-2 text-xs text-black/50 dark:text-white/50">
+                    Изменилось пикселей: {(check.diffRatio * 100).toFixed(2)}%
+                  </p>
+                ) : null}
+
+                <p className="mt-3 text-sm">
+                  {check.aiSummary ??
+                    (check.isBaseline
+                      ? "Эталонный снимок — точка отсчёта для будущих сравнений."
+                      : "Вердикт ИИ отсутствует.")}
+                </p>
+              </article>
+            );
+          })
         )}
       </section>
     </main>

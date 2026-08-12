@@ -59,7 +59,10 @@ export async function analyzeScreenshots(
     toDataUrl(newPath),
   ]);
 
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({
+    apiKey,
+    baseURL: process.env.OPENAI_BASE_URL || undefined,
+  });
 
   let completion;
   try {
