@@ -5,9 +5,18 @@ import { PLAN_LIMITS, type PlanName } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 
+export interface AddSiteValues {
+  name: string;
+  url: string;
+  cssSelector: string;
+  checkIntervalHours: string;
+}
+
 export interface AddSiteState {
   error?: string;
   success?: boolean;
+  /** Введённые значения, чтобы форма не терялась при ошибке. */
+  values?: AddSiteValues;
 }
 
 function normalizeUrl(raw: string): string | null {
@@ -26,30 +35,44 @@ export async function addSite(
   _prevState: AddSiteState,
   formData: FormData,
 ): Promise<AddSiteState> {
+  const name = String(formData.get("name") ?? "").trim();
+  const rawUrl = String(formData.get("url") ?? "").trim();
+  const cssSelector = String(formData.get("cssSelector") ?? "").trim();
+  const rawInterval = String(formData.get("checkIntervalHours") ?? "24").trim();
+  const values: AddSiteValues = {
+    name,
+    url: rawUrl,
+    cssSelector,
+    checkIntervalHours: rawInterval,
+  };
+
   const user = await getCurrentUser();
   if (!user) {
-    return { error: "Нет активного пользователя" };
+    return { error: "Нет активного пользователя", values };
   }
 
-  const name = String(formData.get("name") ?? "").trim();
-  const url = normalizeUrl(String(formData.get("url") ?? "").trim());
-  const cssSelector = String(formData.get("cssSelector") ?? "").trim();
-  const checkIntervalHours = Number(formData.get("checkIntervalHours") ?? 24);
+  const url = normalizeUrl(rawUrl);
+  const checkIntervalHours = Number(rawInterval);
 
   if (!name) {
-    return { error: "Укажите название сайта" };
+    return { error: "Укажите название сайта", values };
   }
   if (!url) {
-    return { error: "Укажите корректный http(s) URL" };
+    return { error: "Укажите корректный http(s) URL", values };
   }
   if (!Number.isInteger(checkIntervalHours) || checkIntervalHours < 1) {
-    return { error: "Интервал должен быть целым числом часов (минимум 1)" };
+    return {
+      error: "Интервал должен быть целым числом часов (минимум 1)",
+      values,
+    };
   }
 
   const plan =
-    PLAN_LIMITS[(user.subscriptionStatus as PlanName) in PLAN_LIMITS
-      ? (user.subscriptionStatus as PlanName)
-      : "free"];
+    PLAN_LIMITS[
+      (user.subscriptionStatus as PlanName) in PLAN_LIMITS
+        ? (user.subscriptionStatus as PlanName)
+        : "free"
+    ];
 
   const existingCount = await prisma.watchedSite.count({
     where: { userId: user.id },
@@ -57,6 +80,7 @@ export async function addSite(
   if (existingCount >= plan.maxSites) {
     return {
       error: `Достигнут лимит тарифа: ${plan.maxSites} сайтов`,
+      values,
     };
   }
 

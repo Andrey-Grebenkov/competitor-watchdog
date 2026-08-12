@@ -4,6 +4,9 @@ export const ghostButton =
 export const ghostButtonWarning =
   "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 no-underline transition hover:bg-amber-50 hover:text-amber-600 dark:text-slate-300 dark:hover:bg-amber-950/40 dark:hover:text-amber-400";
 
+export const ghostButtonDanger =
+  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-red-600 no-underline transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300";
+
 export const primaryButton =
   "inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white no-underline shadow-sm transition hover:bg-blue-500 disabled:opacity-50";
 

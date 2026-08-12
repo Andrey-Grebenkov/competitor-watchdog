@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { badge, card, ghostButton, ghostButtonWarning } from "@/lib/ui";
 import { AddSiteForm } from "./AddSiteForm";
+import { DeleteSiteButton } from "./DeleteSiteButton";
 import { toggleSite } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +128,10 @@ export default async function DashboardPage() {
                             {site.isActive ? "Пауза" : "Включить"}
                           </button>
                         </form>
+                        <DeleteSiteButton
+                          siteId={site.id}
+                          siteName={site.name}
+                        />
                       </div>
                     </td>
                   </tr>

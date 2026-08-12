@@ -22,6 +22,7 @@ export function AddSiteForm() {
     addSite,
     {},
   );
+  const values = state.values;
 
   return (
     <form
@@ -34,6 +35,7 @@ export function AddSiteForm() {
           name="name"
           required
           placeholder="Конкурент А"
+          defaultValue={values?.name ?? ""}
           className={input}
         />
       </label>
@@ -45,6 +47,7 @@ export function AddSiteForm() {
           type="url"
           required
           placeholder="https://competitor.com/product"
+          defaultValue={values?.url ?? ""}
           className={input}
         />
       </label>
@@ -54,6 +57,7 @@ export function AddSiteForm() {
         <input
           name="cssSelector"
           placeholder="div.current-price"
+          defaultValue={values?.cssSelector ?? ""}
           className={input}
         />
       </label>
@@ -64,18 +68,18 @@ export function AddSiteForm() {
           name="checkIntervalHours"
           type="number"
           min={1}
-          defaultValue={24}
+          defaultValue={values?.checkIntervalHours ?? "24"}
           className={input}
         />
       </label>
 
-      <div className="flex items-center gap-3 sm:col-span-2">
+      <div className="sm:col-span-2">
         <SubmitButton />
         {state.error ? (
-          <p className="text-sm text-red-600">{state.error}</p>
+          <p className="mt-3 text-sm text-red-600">{state.error}</p>
         ) : null}
         {state.success ? (
-          <p className="text-sm text-green-600">Сайт добавлен</p>
+          <p className="mt-3 text-sm text-green-600">Сайт добавлен</p>
         ) : null}
       </div>
     </form>

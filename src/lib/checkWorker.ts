@@ -2,7 +2,11 @@ import type { User, WatchedSite } from "@prisma/client";
 import { analyzeScreenshots, type AnalysisResult } from "@/lib/aiAnalyzer";
 import { prisma } from "@/lib/prisma";
 import { captureScreenshot } from "@/lib/scraper";
-import { escapeHtml, isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
+import {
+  escapeHtml,
+  isTelegramConfigured,
+  sendTelegramMessage,
+} from "@/lib/telegram";
 
 export const PLAN_LIMITS = {
   free: { maxSites: 2, minIntervalHours: 24 },
@@ -12,9 +16,7 @@ export const PLAN_LIMITS = {
 export type PlanName = keyof typeof PLAN_LIMITS;
 
 export type SkipReason =
-  | "plan_site_limit"
-  | "interval_not_elapsed"
-  | "no_baseline";
+  "plan_site_limit" | "interval_not_elapsed" | "no_baseline";
 
 export interface SiteCheckResult {
   siteId: string;
@@ -39,10 +41,7 @@ export function planFor(user: User): (typeof PLAN_LIMITS)[PlanName] {
     : PLAN_LIMITS.free;
 }
 
-export function effectiveIntervalHours(
-  site: WatchedSite,
-  user: User,
-): number {
+export function effectiveIntervalHours(site: WatchedSite, user: User): number {
   const { minIntervalHours } = planFor(user);
   return user.subscriptionStatus === "premium"
     ? Math.max(site.checkIntervalHours, minIntervalHours)
@@ -87,7 +86,11 @@ async function checkSite(
   now: Date,
 ): Promise<SiteCheckResult> {
   if (!allowedSiteIds.has(site.id)) {
-    return { siteId: site.id, status: "skipped", skipReason: "plan_site_limit" };
+    return {
+      siteId: site.id,
+      status: "skipped",
+      skipReason: "plan_site_limit",
+    };
   }
 
   const lastCheck = await prisma.checkHistory.findFirst({
@@ -157,7 +160,9 @@ async function checkSite(
   }
 }
 
-export async function runCheckWorker(now = new Date()): Promise<WorkerRunResult> {
+export async function runCheckWorker(
+  now = new Date(),
+): Promise<WorkerRunResult> {
   const startedAt = now;
 
   const sites = await prisma.watchedSite.findMany({
