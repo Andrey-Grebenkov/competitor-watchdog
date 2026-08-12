@@ -17,9 +17,10 @@ export function CheckNowButton({ siteId }: { siteId: string }) {
         method: "POST",
       });
       const body = (await response.json().catch(() => null)) as {
+        ok?: boolean;
         error?: string;
       } | null;
-      if (!response.ok) {
+      if (!response.ok || body?.ok === false) {
         setError(body?.error ?? "Не удалось выполнить проверку");
         return;
       }

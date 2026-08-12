@@ -37,13 +37,17 @@ export async function POST(
       result.failedStage === "persist" || !result.error
         ? `Проверка не удалась: ${result.error ?? "неизвестная ошибка"}`
         : result.error;
-    return Response.json(
-      { error, failedStage: result.failedStage },
-      { status: 502 },
-    );
+    // Сбой скрапинга или модели — ожидаемый результат, а не ошибка транспорта: отвечаем 200.
+    return Response.json({
+      ok: false,
+      status: result.status,
+      failedStage: result.failedStage,
+      error,
+    });
   }
 
   return Response.json({
+    ok: true,
     status: result.status,
     skipReason: result.skipReason,
     summary: result.analysis?.summary,

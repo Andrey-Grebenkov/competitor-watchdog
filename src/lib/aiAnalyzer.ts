@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import OpenAI from "openai";
-import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
 /** OpenAI-совместимый endpoint Gemini используется по умолчанию. */
@@ -45,7 +44,15 @@ export class AiAnalysisError extends Error {
 const SYSTEM_PROMPT = `You compare two screenshots of a competitor's web page: the first image is the previous state, the second is the current state.
 Report only meaningful commercial changes (prices, discounts, promo banners, stock availability), ignoring rendering noise such as carousels, ads rotation or antialiasing.
 Set urgency to "high" only for price changes or new promo campaigns, "medium" for stock or layout changes affecting offers, "low" otherwise.
-When nothing meaningful changed, set hasChanges to false, changes to an empty array and summary to a short explanation.`;
+When nothing meaningful changed, set hasChanges to false, changes to an empty array and summary to a short explanation.
+Answer with a single JSON object and nothing else, using exactly this shape:
+{"hasChanges": boolean, "summary": string, "urgency": "low" | "medium" | "high", "changes": [{"type": string, "field": string, "from": string, "to": string}]}`;
+
+/** Убирает markdown-обёртку ```json ... ```, которую иногда добавляет модель. */
+function stripCodeFence(content: string): string {
+  const fenced = content.trim().match(/^```(?:json)?\s*([\s\S]*?)```$/i);
+  return (fenced ? fenced[1] : content).trim();
+}
 
 /** Ошибка ключа/доступа: статус 401/403 или явное сообщение провайдера. */
 function isAuthError(error: unknown): boolean {
@@ -89,9 +96,9 @@ export async function analyzeScreenshots(
 
   let completion;
   try {
-    completion = await client.chat.completions.parse({
+    completion = await client.chat.completions.create({
       model: VISION_MODEL,
-      response_format: zodResponseFormat(analysisSchema, "page_diff_analysis"),
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -118,19 +125,29 @@ export async function analyzeScreenshots(
     throw new AiAnalysisError(`Model refused the request: ${message.refusal}`);
   }
 
-  const parsed = message?.parsed;
-  if (!parsed) {
+  const content = message?.content;
+  if (!content) {
+    throw new AiAnalysisError("Vision API вернул пустой ответ");
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(stripCodeFence(content));
+  } catch (error) {
+    console.error("Vision API Error Details:", error, content);
     throw new AiAnalysisError(
-      `Model returned no parseable JSON: ${message?.content ?? "empty response"}`,
+      `Vision API вернул невалидный JSON: ${content.slice(0, 200)}`,
+      { cause: error },
     );
   }
 
-  const validated = analysisSchema.safeParse(parsed);
-  if (!validated.success) {
+  try {
+    return analysisSchema.parse(payload);
+  } catch (error) {
+    console.error("Vision API Error Details:", error, payload);
     throw new AiAnalysisError(
-      `Model response does not match the expected schema: ${validated.error.message}`,
+      `Ответ Vision API не соответствует ожидаемой схеме: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
-
-  return validated.data;
 }

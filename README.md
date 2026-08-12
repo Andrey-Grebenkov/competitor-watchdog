@@ -87,6 +87,14 @@ OPENAI_API_KEY и OPENAI_BASE_URL в .env».
 
 Сбой скрапинга никогда не подменяется сообщением про Vision API и наоборот.
 
+`POST /api/sites/[siteId]/check` при таком сбое отвечает 200 с
+`{ ok: false, failedStage, error }` — 502 больше не возвращается, UI показывает
+текст ошибки под кнопкой «Проверить сейчас».
+
+Разбор ответа модели: запрос идёт через `chat.completions.create` с
+`response_format: { type: "json_object" }` (совместимо с Gemini), затем
+`JSON.parse` (с отбрасыванием markdown-обёртки) и `analysisSchema.parse`.
+
 ## Скриншоты и дифф
 
 Снимки лежат в `/tmp/screenshots` и отдаются клиенту через
