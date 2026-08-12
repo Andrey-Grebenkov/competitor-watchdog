@@ -4,12 +4,27 @@ import { z } from "zod";
 export const DEFAULT_GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
 
-export const DEFAULT_VISION_MODEL = "gemini-1.5-flash";
+export const DEFAULT_VISION_MODEL = "gemini-2.5-flash";
 
-export const VISION_MODEL =
+/** Запасная модель, если основная недоступна (404 от провайдера). */
+export const FALLBACK_VISION_MODEL = "gemini-1.5-flash";
+
+/** Имя модели без префикса `models/` — он добавляется в пути URL. */
+function normalizeModel(model: string): string {
+  return model.trim().replace(/^models\//, "");
+}
+
+export const VISION_MODEL = normalizeModel(
   process.env.GEMINI_MODEL?.trim() ||
-  process.env.OPENAI_VISION_MODEL?.trim() ||
-  DEFAULT_VISION_MODEL;
+    process.env.OPENAI_VISION_MODEL?.trim() ||
+    DEFAULT_VISION_MODEL,
+);
+
+/** Модели в порядке попыток. */
+export const VISION_MODEL_CHAIN: string[] =
+  VISION_MODEL === FALLBACK_VISION_MODEL
+    ? [VISION_MODEL]
+    : [VISION_MODEL, FALLBACK_VISION_MODEL];
 
 /** База без завершающих слешей — иначе Gemini отвечает 404. */
 export const GEMINI_API_BASE = (
@@ -18,7 +33,7 @@ export const GEMINI_API_BASE = (
 
 /** Итоговый URL вызова модели. */
 export function geminiEndpoint(model = VISION_MODEL): string {
-  return `${GEMINI_API_BASE}/models/${model}:generateContent`;
+  return `${GEMINI_API_BASE}/models/${normalizeModel(model)}:generateContent`;
 }
 
 export const AUTH_ERROR_MESSAGE =
@@ -158,44 +173,61 @@ export async function analyzeScreenshots(
     toBase64(newPath),
   ]);
 
-  const endpoint = geminiEndpoint();
-
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: "Previous screenshot:" },
-              { inlineData: { mimeType: "image/png", data: previousImage } },
-              { text: "Current screenshot:" },
-              { inlineData: { mimeType: "image/png", data: currentImage } },
-            ],
-          },
+  const requestBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: "Previous screenshot:" },
+          { inlineData: { mimeType: "image/png", data: previousImage } },
+          { text: "Current screenshot:" },
+          { inlineData: { mimeType: "image/png", data: currentImage } },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
+    },
+  });
+
+  let response: Response | undefined;
+  let rawBody = "";
+  for (const [index, model] of VISION_MODEL_CHAIN.entries()) {
+    try {
+      response = await fetch(geminiEndpoint(model), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
         },
-      }),
-    });
-  } catch (error) {
-    console.error("Vision API Error Details:", error);
-    throw new AiAnalysisError(
-      `Vision API недоступен: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
+        body: requestBody,
+      });
+    } catch (error) {
+      console.error("Vision API Error Details:", error);
+      throw new AiAnalysisError(
+        `Vision API недоступен: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+
+    rawBody = await response.text();
+    const hasFallback = index < VISION_MODEL_CHAIN.length - 1;
+    if (response.status === 404 && hasFallback) {
+      console.error(
+        "Vision API Error Details:",
+        `модель ${model} недоступна (404), пробуем ${VISION_MODEL_CHAIN[index + 1]}`,
+      );
+      continue;
+    }
+    break;
   }
 
-  const rawBody = await response.text();
+  if (!response) {
+    throw new AiAnalysisError("Vision API не вернул ответ");
+  }
+
   if (!rawBody || !rawBody.trim()) {
     console.error("Gemini Raw Response:", rawBody);
     if (!response.ok) {

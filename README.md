@@ -72,9 +72,11 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chec
 запрашивается с `generationConfig.responseMimeType = "application/json"` и
 `responseSchema`. Затем `JSON.parse` (с отбрасыванием markdown-обёртки) и
 `analysisSchema.parse`. Дефолты: `https://generativelanguage.googleapis.com/v1beta`
-и `gemini-1.5-flash`; ключ — `GEMINI_API_KEY` или (для совместимости) `OPENAI_API_KEY`.
-Завершающие слеши в `GEMINI_API_BASE` отбрасываются (`geminiEndpoint()`), иначе
-адрес вида `.../v1beta//models/...` даёт 404.
+и `gemini-2.5-flash`; ключ — `GEMINI_API_KEY` или (для совместимости) `OPENAI_API_KEY`.
+Если модель отвечает 404, запрос повторяется с `gemini-1.5-flash`.
+Завершающие слеши в `GEMINI_API_BASE` отбрасываются, а из имени модели снимается
+префикс `models/` (`geminiEndpoint()`), иначе адрес вида `.../v1beta//models/models/...`
+даёт 404.
 
 Скрапер запускает Chromium с `--disable-http2` (часть сайтов рвёт HTTP/2-потоки —
 `ERR_HTTP2_SERVER_REFUSED_STREAM`) и ждёт `domcontentloaded` + 2 с на отрисовку.
