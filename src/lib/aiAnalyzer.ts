@@ -4,14 +4,22 @@ import { z } from "zod";
 export const DEFAULT_GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
 
-export const DEFAULT_VISION_MODEL = "gemini-2.5-flash";
+export const DEFAULT_VISION_MODEL = "gemini-1.5-flash-latest";
 
-/** Запасная модель, если основная недоступна (404 от провайдера). */
-export const FALLBACK_VISION_MODEL = "gemini-1.5-flash";
+/** Запасные модели, если основная недоступна (404 от провайдера). */
+export const FALLBACK_VISION_MODELS = [
+  DEFAULT_VISION_MODEL,
+  "gemini-1.5-pro",
+] as const;
 
-/** Имя модели без префикса `models/` — он добавляется в пути URL. */
+/**
+ * Приводит имя модели к виду, который принимает v1beta REST API: снимает
+ * префикс `models/` (он добавляется в пути URL) и дополняет `gemini-1.5-flash`
+ * до `gemini-1.5-flash-latest`.
+ */
 function normalizeModel(model: string): string {
-  return model.trim().replace(/^models\//, "");
+  const name = model.trim().replace(/^models\//, "");
+  return name === "gemini-1.5-flash" ? DEFAULT_VISION_MODEL : name;
 }
 
 export const VISION_MODEL = normalizeModel(
@@ -20,11 +28,10 @@ export const VISION_MODEL = normalizeModel(
     DEFAULT_VISION_MODEL,
 );
 
-/** Модели в порядке попыток. */
-export const VISION_MODEL_CHAIN: string[] =
-  VISION_MODEL === FALLBACK_VISION_MODEL
-    ? [VISION_MODEL]
-    : [VISION_MODEL, FALLBACK_VISION_MODEL];
+/** Модели в порядке попыток, без повторов. */
+export const VISION_MODEL_CHAIN: string[] = [
+  ...new Set([VISION_MODEL, ...FALLBACK_VISION_MODELS]),
+];
 
 /** База без завершающих слешей — иначе Gemini отвечает 404. */
 export const GEMINI_API_BASE = (
