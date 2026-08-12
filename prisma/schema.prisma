@@ -8,19 +8,20 @@ generator client {
 }
 
 model User {
-  id                 String        @id @default(uuid())
-  email              String        @unique
+  id                 String          @id @default(uuid())
+  email              String          @unique
   passwordHash       String?
   name               String?
   image              String?
   emailVerified      DateTime?
-  subscriptionStatus String        @default("free") // free, premium
+  subscriptionStatus String          @default("free") // free, premium
   telegramChatId     String?
-  createdAt          DateTime      @default(now())
+  createdAt          DateTime        @default(now())
   sites              WatchedSite[]
   accounts           Account[]
   sessions           Session[]
   feedback           Feedback[]
+  baselineEvents     BaselineEvent[]
 }
 
 model Account {
@@ -80,6 +81,19 @@ model Feedback {
   createdAt DateTime @default(now())
 }
 
+/// Журнал созданных эталонов: живёт независимо от сайтов, чтобы удаление сайта
+/// не обнуляло суточный лимит эталонов.
+model BaselineEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteId    String?
+  siteUrl   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
 model CheckHistory {
   id               String      @id @default(uuid())
   siteId           String
@@ -87,5 +101,6 @@ model CheckHistory {
   screenshotUrl    String
   aiSummary        String?
   isAlertTriggered Boolean     @default(false)
+  isBaseline       Boolean     @default(false)
   checkedAt        DateTime    @default(now())
 }

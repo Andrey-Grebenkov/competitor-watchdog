@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { performSiteCheck } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
-import { getUserQuota } from "@/lib/quota";
+import { baselineLimitMessage, getUserQuota } from "@/lib/quota";
 
 export interface AddSiteValues {
   name: string;
@@ -76,6 +76,9 @@ export async function addSite(
       error: `Достигнут лимит тарифа: ${quota.limits.maxSites} сайтов`,
       values,
     };
+  }
+  if (quota.dailyBaselinesExhausted) {
+    return { error: baselineLimitMessage(quota), values };
   }
 
   const site = await prisma.watchedSite.create({

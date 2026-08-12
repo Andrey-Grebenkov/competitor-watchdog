@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOutUser } from "@/app/(auth)/actions";
+import { nextCheckLabel } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
-import { getUserQuota } from "@/lib/quota";
+import { baselineQuotaLabel, getUserQuota } from "@/lib/quota";
 import { badge, card, ghostButton, ghostButtonWarning } from "@/lib/ui";
 import { AddSiteForm } from "./AddSiteForm";
 import { CheckNowButton } from "./CheckNowButton";
@@ -25,7 +26,8 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const quota = await getUserQuota(user);
+  const now = new Date();
+  const quota = await getUserQuota(user, now);
 
   const sites = await prisma.watchedSite.findMany({
     where: { userId: user.id },
@@ -45,8 +47,9 @@ export default async function DashboardPage() {
             {user.email} · Тариф{" "}
             {quota.planName === "premium" ? "Premium" : "Free"} · Сайты:{" "}
             {quota.sitesUsed}/{quota.limits.maxSites} · Проверки сегодня:{" "}
-            {quota.checksUsed}/{quota.limits.maxDailyChecks} · минимальный
-            интервал {quota.limits.minIntervalHours} ч
+            {quota.checksUsed}/{quota.limits.maxDailyChecks} · Лимит эталонов
+            сегодня: {baselineQuotaLabel(quota)} · минимальный интервал{" "}
+            {quota.limits.minIntervalHours} ч
           </p>
         </div>
         <nav className="flex items-center gap-1">
@@ -111,9 +114,14 @@ export default async function DashboardPage() {
                     </td>
                     <td className="px-4 py-3">{site.checkIntervalHours} ч</td>
                     <td className="px-4 py-3">
-                      {lastCheck
-                        ? dateFormatter.format(lastCheck.checkedAt)
-                        : "—"}
+                      <div>
+                        {lastCheck
+                          ? dateFormatter.format(lastCheck.checkedAt)
+                          : "—"}
+                      </div>
+                      <div className="text-xs text-black/50 dark:text-white/50">
+                        {nextCheckLabel(site, user, lastCheck?.checkedAt, now)}
+                      </div>
                     </td>
                     <td className="px-4 py-3">{site._count.history}</td>
                     <td className="px-4 py-3">

@@ -55,20 +55,29 @@ export default async function SiteHistoryPage({
           site.history.map((check) => (
             <article key={check.id} className={`p-4 ${card}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span
-                  className={
-                    check.isAlertTriggered ? badge.alert : badge.neutral
-                  }
-                >
-                  {check.isAlertTriggered ? "есть изменения" : "без изменений"}
-                </span>
+                {check.isBaseline ? (
+                  <span className={badge.accent}>Эталонный снимок</span>
+                ) : (
+                  <span
+                    className={
+                      check.isAlertTriggered ? badge.alert : badge.neutral
+                    }
+                  >
+                    {check.isAlertTriggered
+                      ? "есть изменения"
+                      : "без изменений"}
+                  </span>
+                )}
                 <time className="text-xs text-black/50 dark:text-white/50">
                   {dateFormatter.format(check.checkedAt)}
                 </time>
               </div>
 
               <p className="mt-3 text-sm">
-                {check.aiSummary ?? "Вердикт ИИ отсутствует (базовый снимок)."}
+                {check.aiSummary ??
+                  (check.isBaseline
+                    ? "Эталонный снимок — точка отсчёта для будущих сравнений."
+                    : "Вердикт ИИ отсутствует.")}
               </p>
 
               <p className="mt-2 text-xs break-all text-black/40 dark:text-white/40">

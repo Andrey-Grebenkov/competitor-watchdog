@@ -42,6 +42,32 @@ export function effectiveIntervalHours(site: WatchedSite, user: User): number {
     : minIntervalHours;
 }
 
+/** Подпись со временем до следующей плановой проверки. */
+export function nextCheckLabel(
+  site: WatchedSite,
+  user: User,
+  lastCheckedAt: Date | undefined,
+  now = new Date(),
+): string {
+  const intervalHours = effectiveIntervalHours(site, user);
+  if (!site.isActive) {
+    return "Проверки на паузе";
+  }
+  if (!lastCheckedAt) {
+    return `Ближайшая проверка через ${intervalHours} ч`;
+  }
+
+  const dueAt = lastCheckedAt.getTime() + intervalHours * 60 * 60 * 1000;
+  const hoursLeft = (dueAt - now.getTime()) / (60 * 60 * 1000);
+  if (hoursLeft <= 0) {
+    return "Ближайшая проверка в следующем запуске";
+  }
+  if (hoursLeft < 1) {
+    return "Ближайшая проверка менее чем через час";
+  }
+  return `Ближайшая проверка через ${Math.ceil(hoursLeft)} ч`;
+}
+
 function isIntervalElapsed(
   lastCheckedAt: Date | undefined,
   intervalHours: number,
@@ -94,9 +120,22 @@ export async function performSiteCheck(
     });
 
     if (!lastCheck) {
-      await prisma.checkHistory.create({
-        data: { siteId: site.id, screenshotUrl: screenshotPath },
-      });
+      await prisma.$transaction([
+        prisma.checkHistory.create({
+          data: {
+            siteId: site.id,
+            screenshotUrl: screenshotPath,
+            isBaseline: true,
+          },
+        }),
+        prisma.baselineEvent.create({
+          data: {
+            userId: site.userId,
+            siteId: site.id,
+            siteUrl: site.url,
+          },
+        }),
+      ]);
       return { siteId: site.id, status: "skipped", skipReason: "no_baseline" };
     }
 
