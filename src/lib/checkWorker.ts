@@ -1,6 +1,6 @@
 import type { User, WatchedSite } from "@prisma/client";
 import { analyzeScreenshots, type AnalysisResult } from "@/lib/aiAnalyzer";
-import { planFor } from "@/lib/plans";
+import { planFor, planNameFor } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { getUserDailyChecksCount } from "@/lib/quota";
 import { captureScreenshot } from "@/lib/scraper";
@@ -37,9 +37,9 @@ type SiteWithUser = WatchedSite & { user: User };
 
 export function effectiveIntervalHours(site: WatchedSite, user: User): number {
   const { minIntervalHours } = planFor(user);
-  return user.subscriptionStatus === "premium"
-    ? Math.max(site.checkIntervalHours, minIntervalHours)
-    : minIntervalHours;
+  return planNameFor(user) === "free"
+    ? minIntervalHours
+    : Math.max(site.checkIntervalHours, minIntervalHours);
 }
 
 /** Подпись со временем до следующей плановой проверки. */
@@ -158,7 +158,7 @@ export async function performSiteCheck(
     if (
       analysis.hasChanges &&
       analysis.urgency === "high" &&
-      site.user.subscriptionStatus === "premium" &&
+      planNameFor(site.user) !== "free" &&
       chatId &&
       isTelegramConfigured()
     ) {
@@ -247,8 +247,13 @@ export async function runCheckWorker(
     if (dailyChecksLeft.has(site.userId)) {
       continue;
     }
+    const maxDailyChecks = planFor(site.user).maxDailyChecks;
+    if (maxDailyChecks === null) {
+      dailyChecksLeft.set(site.userId, Number.POSITIVE_INFINITY);
+      continue;
+    }
     const used = await getUserDailyChecksCount(site.userId, now);
-    dailyChecksLeft.set(site.userId, planFor(site.user).maxDailyChecks - used);
+    dailyChecksLeft.set(site.userId, maxDailyChecks - used);
   }
 
   const results: SiteCheckResult[] = [];

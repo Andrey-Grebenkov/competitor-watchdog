@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { getCurrentUser } from "@/lib/currentUser";
 import { badge, card, ghostButton, primaryButton } from "@/lib/ui";
+
+export const dynamic = "force-dynamic";
 
 const features = [
   {
@@ -36,7 +39,9 @@ const plans = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentUser();
+
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-16 px-6 py-20">
       <section className="flex flex-col items-start gap-6">
@@ -62,6 +67,11 @@ export default function Home() {
           <Link href="/dashboard/feedback" className={ghostButton}>
             Обратная связь
           </Link>
+          {user?.role === "ADMIN" ? (
+            <Link href="/admin" className={ghostButton}>
+              Админ-панель
+            </Link>
+          ) : null}
         </div>
       </section>
 

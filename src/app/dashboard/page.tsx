@@ -4,7 +4,13 @@ import { signOutUser } from "@/app/(auth)/actions";
 import { nextCheckLabel } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
-import { baselineQuotaLabel, getUserQuota } from "@/lib/quota";
+import { planLabel } from "@/lib/plans";
+import {
+  baselineQuotaLabel,
+  checksQuotaLabel,
+  getUserQuota,
+  sitesQuotaLabel,
+} from "@/lib/quota";
 import { badge, card, ghostButton, ghostButtonWarning } from "@/lib/ui";
 import { AddSiteForm } from "./AddSiteForm";
 import { CheckNowButton } from "./CheckNowButton";
@@ -44,15 +50,19 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold">Отслеживаемые сайты</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
-            {user.email} · Тариф{" "}
-            {quota.planName === "premium" ? "Premium" : "Free"} · Сайты:{" "}
-            {quota.sitesUsed}/{quota.limits.maxSites} · Проверки сегодня:{" "}
-            {quota.checksUsed}/{quota.limits.maxDailyChecks} · Лимит эталонов
-            сегодня: {baselineQuotaLabel(quota)} · минимальный интервал{" "}
+            {user.email} · Тариф {planLabel(quota.planName)} · Сайты:{" "}
+            {sitesQuotaLabel(quota)} · Проверки сегодня:{" "}
+            {checksQuotaLabel(quota)} · Лимит эталонов сегодня:{" "}
+            {baselineQuotaLabel(quota)} · минимальный интервал{" "}
             {quota.limits.minIntervalHours} ч
           </p>
         </div>
         <nav className="flex items-center gap-1">
+          {user.role === "ADMIN" ? (
+            <Link href="/admin" className={ghostButton}>
+              Админ-панель
+            </Link>
+          ) : null}
           <Link href="/dashboard/feedback" className={ghostButton}>
             Обратная связь
           </Link>

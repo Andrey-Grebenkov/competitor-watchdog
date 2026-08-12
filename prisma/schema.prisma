@@ -7,6 +7,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id                 String          @id @default(uuid())
   email              String          @unique
@@ -15,6 +20,9 @@ model User {
   image              String?
   emailVerified      DateTime?
   subscriptionStatus String          @default("free") // free, premium
+  role               UserRole        @default(USER)
+  /// Безлимитный доступ без оплаты: лимиты тарифа не применяются.
+  isUnlimited        Boolean         @default(false)
   telegramChatId     String?
   createdAt          DateTime        @default(now())
   sites              WatchedSite[]
@@ -61,7 +69,7 @@ model VerificationToken {
 model WatchedSite {
   id                 String         @id @default(uuid())
   userId             String
-  user               User           @relation(fields: [userId], references: [id])
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   url                String
   name               String
   cssSelector        String?
@@ -97,7 +105,7 @@ model BaselineEvent {
 model CheckHistory {
   id               String      @id @default(uuid())
   siteId           String
-  site             WatchedSite @relation(fields: [siteId], references: [id])
+  site             WatchedSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
   screenshotUrl    String
   aiSummary        String?
   isAlertTriggered Boolean     @default(false)

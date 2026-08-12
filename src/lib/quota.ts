@@ -1,5 +1,11 @@
 import type { User } from "@prisma/client";
-import { PLAN_LIMITS, planFor, planNameFor, type PlanName } from "@/lib/plans";
+import {
+  hasUnlimitedAccess,
+  planFor,
+  planNameFor,
+  type PlanLimits,
+  type PlanName,
+} from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 export const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -36,7 +42,8 @@ export async function getUserDailyBaselinesCount(
 
 export interface UserQuota {
   planName: PlanName;
-  limits: (typeof PLAN_LIMITS)[PlanName];
+  limits: PlanLimits;
+  unlimited: boolean;
   sitesUsed: number;
   checksUsed: number;
   baselinesUsed: number;
@@ -50,6 +57,7 @@ export async function getUserQuota(
   now = new Date(),
 ): Promise<UserQuota> {
   const limits = planFor(user);
+  const unlimited = hasUnlimitedAccess(user);
   const [sitesUsed, checksUsed, baselinesUsed] = await Promise.all([
     prisma.watchedSite.count({ where: { userId: user.id } }),
     getUserDailyChecksCount(user.id, now),
@@ -59,12 +67,17 @@ export async function getUserQuota(
   return {
     planName: planNameFor(user),
     limits,
+    unlimited,
     sitesUsed,
     checksUsed,
     baselinesUsed,
-    sitesExhausted: sitesUsed >= limits.maxSites,
-    dailyChecksExhausted: checksUsed >= limits.maxDailyChecks,
+    sitesExhausted: !unlimited && sitesUsed >= limits.maxSites,
+    dailyChecksExhausted:
+      !unlimited &&
+      limits.maxDailyChecks !== null &&
+      checksUsed >= limits.maxDailyChecks,
     dailyBaselinesExhausted:
+      !unlimited &&
       limits.maxDailyBaselines !== null &&
       baselinesUsed >= limits.maxDailyBaselines,
   };
@@ -78,9 +91,24 @@ export function baselineLimitMessage(quota: UserQuota): string {
   return `Вы исчерпали лимит создания эталонов на сегодня (${quota.baselinesUsed}/${quota.limits.maxDailyBaselines}). Перейдите на тариф Pro или попробуйте завтра`;
 }
 
+function quotaLabel(used: number, limit: number | null): string {
+  return limit === null ? `${used}/∞` : `${used}/${limit}`;
+}
+
+/** Надпись со счётчиком сайтов для шапки дашборда. */
+export function sitesQuotaLabel(quota: UserQuota): string {
+  return quotaLabel(
+    quota.sitesUsed,
+    quota.unlimited ? null : quota.limits.maxSites,
+  );
+}
+
+/** Надпись со счётчиком проверок для шапки дашборда. */
+export function checksQuotaLabel(quota: UserQuota): string {
+  return quotaLabel(quota.checksUsed, quota.limits.maxDailyChecks);
+}
+
 /** Надпись со счётчиком эталонов для шапки дашборда. */
 export function baselineQuotaLabel(quota: UserQuota): string {
-  return quota.limits.maxDailyBaselines === null
-    ? `${quota.baselinesUsed}/∞`
-    : `${quota.baselinesUsed}/${quota.limits.maxDailyBaselines}`;
+  return quotaLabel(quota.baselinesUsed, quota.limits.maxDailyBaselines);
 }
