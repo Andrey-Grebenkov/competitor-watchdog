@@ -11,8 +11,15 @@ export const VISION_MODEL =
   process.env.OPENAI_VISION_MODEL?.trim() ||
   DEFAULT_VISION_MODEL;
 
-export const GEMINI_API_BASE =
-  process.env.GEMINI_API_BASE?.trim() || DEFAULT_GEMINI_API_BASE;
+/** База без завершающих слешей — иначе Gemini отвечает 404. */
+export const GEMINI_API_BASE = (
+  process.env.GEMINI_API_BASE?.trim() || DEFAULT_GEMINI_API_BASE
+).replace(/\/+$/, "");
+
+/** Итоговый URL вызова модели. */
+export function geminiEndpoint(model = VISION_MODEL): string {
+  return `${GEMINI_API_BASE}/models/${model}:generateContent`;
+}
 
 export const AUTH_ERROR_MESSAGE =
   "Ошибка авторизации: проверьте GEMINI_API_KEY (или OPENAI_API_KEY) и GEMINI_API_BASE в .env";
@@ -151,7 +158,7 @@ export async function analyzeScreenshots(
     toBase64(newPath),
   ]);
 
-  const endpoint = `${GEMINI_API_BASE.replace(/\/$/, "")}/models/${VISION_MODEL}:generateContent`;
+  const endpoint = geminiEndpoint();
 
   let response: Response;
   try {

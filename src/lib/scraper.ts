@@ -12,6 +12,9 @@ const VIEWPORT = { width: 1280, height: 800 };
 
 const NAVIGATION_TIMEOUT_MS = 60_000;
 
+/** Пауза после domcontentloaded, чтобы страница успела отрисоваться. */
+const RENDER_DELAY_MS = 2000;
+
 export interface CaptureOptions {
   url: string;
   cssSelector?: string | null;
@@ -59,6 +62,8 @@ export async function captureScreenshot({
       headless: true,
       args: [
         "--disable-blink-features=AutomationControlled",
+        // HTTP/1.1 устойчивее: часть сайтов рвёт HTTP/2-потоки ботам.
+        "--disable-http2",
         "--no-sandbox",
         "--disable-dev-shm-usage",
       ],
@@ -75,7 +80,8 @@ export async function captureScreenshot({
     const page = await context.newPage();
     await applyStealth(page);
 
-    await page.goto(url, { waitUntil: "networkidle", timeout: timeoutMs });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    await page.waitForTimeout(RENDER_DELAY_MS);
 
     if (cssSelector) {
       const element = page.locator(cssSelector).first();
