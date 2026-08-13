@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type Page, type Route } from "playwright";
+import { assertPublicUrl, BlockedUrlError, isPublicUrl } from "@/lib/urlGuard";
 
 export const SCREENSHOT_DIR = "/tmp/screenshots";
 
@@ -35,6 +36,26 @@ export interface CaptureResult {
   usedSelector: boolean;
 }
 
+/**
+ * Отсекает переходы (в том числе через редиректы) на адреса внутренней сети:
+ * проверки URL до навигации недостаточно, редирект может увести на localhost
+ * или облачный metadata-эндпоинт.
+ */
+async function blockPrivateNavigations(page: Page): Promise<void> {
+  await page.route("**/*", async (route: Route) => {
+    const request = route.request();
+    if (request.resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+    if (await isPublicUrl(request.url())) {
+      await route.continue();
+      return;
+    }
+    await route.abort("blockedbyclient");
+  });
+}
+
 async function applyStealth(page: Page): Promise<void> {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
@@ -53,6 +74,17 @@ export async function captureScreenshot({
   cssSelector,
   timeoutMs = NAVIGATION_TIMEOUT_MS,
 }: CaptureOptions): Promise<CaptureResult> {
+  try {
+    await assertPublicUrl(url);
+  } catch (error) {
+    if (error instanceof BlockedUrlError) {
+      throw new ScrapeError(`Адрес недоступен для проверки: ${error.message}`, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+
   await mkdir(SCREENSHOT_DIR, { recursive: true });
   const screenshotPath = path.join(SCREENSHOT_DIR, `${randomUUID()}.png`);
 
@@ -79,6 +111,7 @@ export async function captureScreenshot({
 
     const page = await context.newPage();
     await applyStealth(page);
+    await blockPrivateNavigations(page);
 
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
     await page.waitForTimeout(RENDER_DELAY_MS);
@@ -99,6 +132,12 @@ export async function captureScreenshot({
   } catch (error) {
     console.error("Playwright Error Details:", error);
     const details = error instanceof Error ? error.message : String(error);
+    if (details.includes("ERR_BLOCKED_BY_CLIENT")) {
+      throw new ScrapeError(
+        "Адрес недоступен для проверки: редирект во внутреннюю сеть",
+        { cause: error },
+      );
+    }
     throw new ScrapeError(
       `Ошибка загрузки сайта (Playwright): ${details.split("\n")[0]}`,
       { cause: error },

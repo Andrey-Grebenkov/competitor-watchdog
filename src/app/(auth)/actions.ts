@@ -5,12 +5,28 @@ import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rateLimit";
 
 export interface AuthFormState {
   error?: string;
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const MAX_PASSWORD_LENGTH = 200;
+
+/** Окно попыток входа/регистрации — тормозит перебор паролей. */
+const AUTH_WINDOW_MS = 10 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 10;
+const MAX_REGISTRATIONS = 5;
+
+function tooManyAttempts(action: string, email: string, limit: number): boolean {
+  return !rateLimit({
+    key: `${action}:${email}`,
+    limit,
+    windowMs: AUTH_WINDOW_MS,
+  }).allowed;
+}
 
 export async function registerUser(
   _prevState: AuthFormState,
@@ -27,6 +43,14 @@ export async function registerUser(
   }
   if (password.length < 8) {
     return { error: "Пароль должен быть не короче 8 символов" };
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    return {
+      error: `Пароль не должен превышать ${MAX_PASSWORD_LENGTH} символов`,
+    };
+  }
+  if (tooManyAttempts("register", email, MAX_REGISTRATIONS)) {
+    return { error: "Слишком много попыток, попробуйте позже" };
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -54,6 +78,10 @@ export async function loginUser(
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
+
+  if (tooManyAttempts("login", email, MAX_LOGIN_ATTEMPTS)) {
+    return { error: "Слишком много попыток входа, попробуйте позже" };
+  }
 
   try {
     await signIn("credentials", { email, password, redirect: false });
