@@ -1,6 +1,8 @@
 "use server";
 
+import type { WatchedSite } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { notFound, redirect } from "next/navigation";
 import { performSiteCheck } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
@@ -107,18 +109,24 @@ export async function addSite(
     return { error: baselineLimitMessage(quota), values };
   }
 
-  const site = await prisma.watchedSite.create({
-    data: {
-      userId: user.id,
-      name,
-      url,
-      cssSelector: cssSelector || null,
-      checkIntervalHours: Math.max(
-        checkIntervalHours,
-        quota.limits.minIntervalHours,
-      ),
-    },
-  });
+  let site: WatchedSite;
+  try {
+    site = await prisma.watchedSite.create({
+      data: {
+        userId: user.id,
+        name,
+        url,
+        cssSelector: cssSelector || null,
+        checkIntervalHours: Math.max(
+          checkIntervalHours,
+          quota.limits.minIntervalHours,
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Add Site Error Details:", error);
+    return { error: "Не удалось сохранить сайт, попробуйте ещё раз", values };
+  }
 
   revalidatePath("/dashboard");
 
@@ -142,10 +150,14 @@ export async function addSite(
   return { success: true };
 }
 
+/**
+ * Переключает паузу проверок. Нет сессии — ведёт на логин, нет сайта — 404:
+ * молчаливый выход выглядел бы как неработающая кнопка.
+ */
 export async function toggleSite(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) {
-    return;
+    redirect("/login");
   }
 
   const siteId = String(formData.get("siteId") ?? "");
@@ -153,7 +165,7 @@ export async function toggleSite(formData: FormData): Promise<void> {
     where: { id: siteId, userId: user.id },
   });
   if (!site) {
-    return;
+    notFound();
   }
 
   await prisma.watchedSite.update({

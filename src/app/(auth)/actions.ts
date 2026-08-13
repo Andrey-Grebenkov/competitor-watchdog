@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
@@ -26,6 +27,14 @@ function tooManyAttempts(action: string, email: string, limit: number): boolean 
     limit,
     windowMs: AUTH_WINDOW_MS,
   }).allowed;
+}
+
+/** Гонка двух регистраций на один email — уникальный индекс в БД. */
+function isEmailTaken(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
 }
 
 export async function registerUser(
@@ -58,15 +67,31 @@ export async function registerUser(
     return { error: "Пользователь с таким email уже зарегистрирован" };
   }
 
-  await prisma.user.create({
-    data: {
-      email,
-      name: name || null,
-      passwordHash: await hash(password, 12),
-    },
-  });
+  try {
+    await prisma.user.create({
+      data: {
+        email,
+        name: name || null,
+        passwordHash: await hash(password, 12),
+      },
+    });
+  } catch (error) {
+    if (isEmailTaken(error)) {
+      return { error: "Пользователь с таким email уже зарегистрирован" };
+    }
+    console.error("Register Error Details:", error);
+    return { error: "Не удалось создать аккаунт, попробуйте ещё раз" };
+  }
 
-  await signIn("credentials", { email, password, redirect: false });
+  try {
+    await signIn("credentials", { email, password, redirect: false });
+  } catch (error) {
+    console.error("Register Sign-in Error Details:", error);
+    return {
+      error: "Аккаунт создан, но войти не удалось — войдите со страницы входа",
+    };
+  }
+
   redirect("/dashboard");
 }
 
@@ -87,6 +112,10 @@ export async function loginUser(
     await signIn("credentials", { email, password, redirect: false });
   } catch (error) {
     if (error instanceof AuthError) {
+      // Неверные данные — ожидаемый случай, но причина нужна в логах:
+      // так же выглядит сбой конфига Auth.js или недоступная БД.
+      // Полный AuthError не логируется: его cause может содержать креды.
+      console.error("Login Error Details:", error.type, error.message);
       return { error: "Неверный email или пароль" };
     }
     throw error;

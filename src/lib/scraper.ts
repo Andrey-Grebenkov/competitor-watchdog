@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, type Browser, type Page, type Route } from "playwright";
+import { errorMessage } from "@/lib/errors";
 import { assertPublicUrl, BlockedUrlError, isPublicUrl } from "@/lib/urlGuard";
 
 export const SCREENSHOT_DIR = "/tmp/screenshots";
@@ -124,7 +125,14 @@ export async function captureScreenshot({
     throw error;
   }
 
-  await mkdir(SCREENSHOT_DIR, { recursive: true });
+  try {
+    await mkdir(SCREENSHOT_DIR, { recursive: true });
+  } catch (error) {
+    throw new ScrapeError(
+      `Не удалось создать каталог для снимков ${SCREENSHOT_DIR}: ${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
   const screenshotPath = path.join(SCREENSHOT_DIR, `${randomUUID()}.png`);
 
   let browser: Browser | undefined;
@@ -180,7 +188,7 @@ export async function captureScreenshot({
       });
     }
     console.error("Playwright Error Details:", error);
-    const details = error instanceof Error ? error.message : String(error);
+    const details = errorMessage(error);
     if (details.includes("ERR_BLOCKED_BY_CLIENT")) {
       throw new ScrapeError(
         "Адрес недоступен для проверки: редирект во внутреннюю сеть",
@@ -192,6 +200,11 @@ export async function captureScreenshot({
       { cause: error },
     );
   } finally {
-    await browser?.close();
+    // Ошибка закрытия не должна подменять исходную причину сбоя.
+    try {
+      await browser?.close();
+    } catch (error) {
+      console.error("Playwright Close Error Details:", error);
+    }
   }
 }

@@ -36,7 +36,8 @@ export function UserRowActions({
         return;
       }
       router.refresh();
-    } catch {
+    } catch (cause) {
+      console.error(`Admin user ${action} request failed`, cause);
       setError(fallback);
     } finally {
       setPending(null);

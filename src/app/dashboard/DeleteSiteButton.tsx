@@ -34,7 +34,8 @@ export function DeleteSiteButton({
         return;
       }
       router.refresh();
-    } catch {
+    } catch (cause) {
+      console.error("Site delete request failed", cause);
       setError("Не удалось удалить сайт");
     } finally {
       setPending(false);
