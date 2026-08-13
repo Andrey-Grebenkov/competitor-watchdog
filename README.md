@@ -72,9 +72,11 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chec
 запрашивается с `generationConfig.responseMimeType = "application/json"` и
 `responseSchema`. Затем `JSON.parse` (с отбрасыванием markdown-обёртки) и
 `analysisSchema.parse`. Дефолты: `https://generativelanguage.googleapis.com/v1beta`
-и `gemini-1.5-flash-latest`; ключ — `GEMINI_API_KEY` или (для совместимости)
+и `gemini-2.0-flash`; ключ — `GEMINI_API_KEY` или (для совместимости)
 `OPENAI_API_KEY`. При 404 модели запрос повторяется по цепочке `GEMINI_MODEL` →
-`gemini-1.5-flash-latest` → `gemini-1.5-pro`.
+`gemini-2.0-flash` → `gemini-1.5-flash-8b` → `gemini-2.0-flash-lite`; если 404
+вернули все, в консоль печатается `Available Models:` — список моделей из
+`GET {baseUrl}/models` для этого ключа.
 Завершающие слеши в `GEMINI_API_BASE` отбрасываются, из имени модели снимается
 префикс `models/`, а `gemini-1.5-flash` дополняется до `gemini-1.5-flash-latest`
 (`geminiEndpoint()`), иначе адрес вида `.../v1beta//models/models/...` даёт 404.

@@ -4,12 +4,13 @@ import { z } from "zod";
 export const DEFAULT_GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
 
-export const DEFAULT_VISION_MODEL = "gemini-1.5-flash-latest";
+export const DEFAULT_VISION_MODEL = "gemini-2.0-flash";
 
 /** Запасные модели, если основная недоступна (404 от провайдера). */
 export const FALLBACK_VISION_MODELS = [
   DEFAULT_VISION_MODEL,
-  "gemini-1.5-pro",
+  "gemini-1.5-flash-8b",
+  "gemini-2.0-flash-lite",
 ] as const;
 
 /**
@@ -19,7 +20,7 @@ export const FALLBACK_VISION_MODELS = [
  */
 function normalizeModel(model: string): string {
   const name = model.trim().replace(/^models\//, "");
-  return name === "gemini-1.5-flash" ? DEFAULT_VISION_MODEL : name;
+  return name === "gemini-1.5-flash" ? "gemini-1.5-flash-latest" : name;
 }
 
 export const VISION_MODEL = normalizeModel(
@@ -125,6 +126,11 @@ const geminiResponseSchema = z.object({
     .optional(),
 });
 
+/** Ответ `GET /models` — только имена. */
+const availableModelsSchema = z.object({
+  models: z.array(z.object({ name: z.string().optional() })).optional(),
+});
+
 /**
  * Вердикт на случай, когда ответ модели пуст или не разбирается: проверка
  * завершается успешно и пайплайн не ломается.
@@ -162,6 +168,31 @@ async function toBase64(filePath: string): Promise<string> {
     throw new AiAnalysisError(`Не удалось прочитать скриншот ${filePath}`, {
       cause: error,
     });
+  }
+}
+
+/**
+ * Диагностика на случай, когда все модели цепочки отдали 404: печатает список
+ * моделей, доступных этому ключу.
+ */
+async function logAvailableModels(apiKey: string): Promise<void> {
+  try {
+    const response = await fetch(
+      `${GEMINI_API_BASE}/models?key=${encodeURIComponent(apiKey)}`,
+    );
+    const rawBody = await response.text();
+    const parsed = availableModelsSchema.safeParse(
+      JSON.parse(rawBody.trim() || "{}"),
+    );
+    const availableModels = parsed.success
+      ? (parsed.data.models ?? []).map((model) =>
+          normalizeModel(model.name ?? ""),
+        )
+      : rawBody.slice(0, 500);
+    console.error("Available Models:", JSON.stringify(availableModels));
+  } catch (error) {
+    console.error("Available Models:", JSON.stringify([]));
+    console.error("Vision API Error Details:", error);
   }
 }
 
@@ -220,15 +251,20 @@ export async function analyzeScreenshots(
     }
 
     rawBody = await response.text();
-    const hasFallback = index < VISION_MODEL_CHAIN.length - 1;
-    if (response.status === 404 && hasFallback) {
-      console.error(
-        "Vision API Error Details:",
-        `модель ${model} недоступна (404), пробуем ${VISION_MODEL_CHAIN[index + 1]}`,
-      );
-      continue;
+    if (response.status !== 404) {
+      break;
     }
-    break;
+
+    const next = VISION_MODEL_CHAIN[index + 1];
+    console.error(
+      "Vision API Error Details:",
+      next
+        ? `модель ${model} недоступна (404), пробуем ${next}`
+        : `модель ${model} недоступна (404), фолбэки исчерпаны`,
+    );
+    if (!next) {
+      await logAvailableModels(apiKey);
+    }
   }
 
   if (!response) {
