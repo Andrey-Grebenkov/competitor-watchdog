@@ -1,4 +1,5 @@
 import { runCheckWorker } from "@/lib/checkWorker";
+import { errorMessage } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,9 +21,7 @@ export async function GET(request: Request) {
     const run = await runCheckWorker();
     return Response.json(run);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: 500 },
-    );
+    console.error("Cron Worker Error Details:", error);
+    return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

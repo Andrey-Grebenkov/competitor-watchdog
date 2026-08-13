@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { errorMessage } from "@/lib/errors";
 
 export const DEFAULT_GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
@@ -245,12 +246,21 @@ export async function analyzeScreenshots(
     } catch (error) {
       console.error("Vision API Error Details:", error);
       throw new AiAnalysisError(
-        `Vision API недоступен: ${error instanceof Error ? error.message : String(error)}`,
+        `Vision API недоступен: ${errorMessage(error)}`,
         { cause: error },
       );
     }
 
-    rawBody = await response.text();
+    try {
+      rawBody = await response.text();
+    } catch (error) {
+      console.error("Vision API Error Details:", error);
+      throw new AiAnalysisError(
+        `Не удалось прочитать ответ Vision API: ${errorMessage(error)}`,
+        { cause: error },
+      );
+    }
+
     if (response.status !== 404) {
       break;
     }
@@ -318,13 +328,26 @@ export async function analyzeScreenshots(
     throw new AiAnalysisError(`Модель отклонила запрос: ${blockReason}`);
   }
 
-  const text = body.candidates?.[0]?.content?.parts
+  const candidate = body.candidates?.[0];
+  const text = candidate?.content?.parts
     ?.map((part) => part.text ?? "")
     .join("")
     .trim();
   if (!text) {
-    console.error("Gemini Raw Response:", rawBody);
-    return UNPARSEABLE_ANALYSIS;
+    console.error(
+      "Gemini Raw Response:",
+      rawBody,
+      "finishReason:",
+      candidate?.finishReason,
+    );
+    // Пустой ответ чаще всего значит SAFETY или MAX_TOKENS — причина
+    // попадает в вердикт, иначе в UI видно только «не удалось распарсить».
+    return candidate?.finishReason
+      ? {
+          ...UNPARSEABLE_ANALYSIS,
+          summary: `Модель не вернула текст (finishReason: ${candidate.finishReason}).`,
+        }
+      : UNPARSEABLE_ANALYSIS;
   }
 
   let payload: unknown;
