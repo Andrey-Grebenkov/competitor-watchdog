@@ -1,5 +1,20 @@
+import { z } from "zod";
+
 const TELEGRAM_API_BASE =
   process.env.TELEGRAM_API_BASE ?? "https://api.telegram.org";
+
+const responseSchema = z.object({
+  ok: z.boolean(),
+  description: z.string().optional(),
+});
+
+function safeJsonParse(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 export class TelegramError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -36,6 +51,7 @@ export async function sendTelegramMessage({
   }
 
   let response: Response;
+  let body: string;
   try {
     response = await fetch(`${TELEGRAM_API_BASE}/bot${token}/sendMessage`, {
       method: "POST",
@@ -48,14 +64,29 @@ export async function sendTelegramMessage({
         disable_notification: disableNotification,
       }),
     });
+    body = await response.text();
   } catch (error) {
     throw new TelegramError("Telegram request failed", { cause: error });
   }
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
     throw new TelegramError(
       `Telegram API returned ${response.status}: ${body || response.statusText}`,
+    );
+  }
+
+  // Telegram сообщает о части ошибок (неверный chat_id, битый HTML) кодом 200
+  // и телом `{"ok": false, ...}` — без разбора тела такой сбой теряется.
+  const parsed = responseSchema.safeParse(safeJsonParse(body));
+  if (!parsed.success) {
+    throw new TelegramError(
+      `Telegram API returned unexpected body: ${body.slice(0, 200)}`,
+      { cause: parsed.error },
+    );
+  }
+  if (!parsed.data.ok) {
+    throw new TelegramError(
+      `Telegram API rejected the message: ${parsed.data.description ?? body.slice(0, 200)}`,
     );
   }
 }

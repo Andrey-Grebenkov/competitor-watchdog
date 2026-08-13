@@ -4,7 +4,8 @@ import {
   AiAnalysisError,
   type AnalysisResult,
 } from "@/lib/aiAnalyzer";
-import { createDiffImage } from "@/lib/imageDiff";
+import { errorMessage } from "@/lib/errors";
+import { createDiffImage, type DiffResult } from "@/lib/imageDiff";
 import { planFor, planNameFor } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { getUserDailyChecksCount } from "@/lib/quota";
@@ -31,6 +32,8 @@ export interface SiteCheckResult {
   status: "analyzed" | "skipped" | "failed";
   skipReason?: SkipReason;
   alertSent?: boolean;
+  /** Проверка записана, но алерт не ушёл: текст ошибки доставки. */
+  alertError?: string;
   analysis?: AnalysisResult;
   error?: string;
   failedStage?: FailedStage;
@@ -117,10 +120,23 @@ function formatAlert(site: WatchedSite, analysis: AnalysisResult): string {
 export async function performSiteCheck(
   site: SiteWithUser,
 ): Promise<SiteCheckResult> {
-  const lastCheck = await prisma.checkHistory.findFirst({
-    where: { siteId: site.id },
-    orderBy: { checkedAt: "desc" },
-  });
+  let lastCheck: Awaited<
+    ReturnType<typeof prisma.checkHistory.findFirst>
+  > = null;
+  try {
+    lastCheck = await prisma.checkHistory.findFirst({
+      where: { siteId: site.id },
+      orderBy: { checkedAt: "desc" },
+    });
+  } catch (error) {
+    console.error("Check Persist Error Details:", error);
+    return {
+      siteId: site.id,
+      status: "failed",
+      failedStage: "persist",
+      error: errorMessage(error),
+    };
+  }
 
   let screenshotPath: string;
   try {
@@ -136,7 +152,7 @@ export async function performSiteCheck(
       error:
         error instanceof ScrapeError
           ? error.message
-          : `Ошибка загрузки сайта (Playwright): ${error instanceof Error ? error.message : String(error)}`,
+          : `Ошибка загрузки сайта (Playwright): ${errorMessage(error)}`,
     };
   }
 
@@ -161,10 +177,14 @@ export async function performSiteCheck(
       return { siteId: site.id, status: "skipped", skipReason: "no_baseline" };
     }
 
-    const diff = await createDiffImage(
-      lastCheck.screenshotUrl,
-      screenshotPath,
-    ).catch(() => null);
+    // Дифф не критичен для вердикта: при сбое проверка продолжается без него,
+    // но причина попадает в лог, а не теряется.
+    let diff: DiffResult | null = null;
+    try {
+      diff = await createDiffImage(lastCheck.screenshotUrl, screenshotPath);
+    } catch (error) {
+      console.error("Diff Error Details:", error);
+    }
 
     let analysis: AnalysisResult;
     try {
@@ -180,7 +200,7 @@ export async function performSiteCheck(
         error:
           error instanceof AiAnalysisError
             ? error.message
-            : `Ошибка анализа ИИ (Vision API): ${error instanceof Error ? error.message : String(error)}`,
+            : `Ошибка анализа ИИ (Vision API): ${errorMessage(error)}`,
       };
     }
 
@@ -196,6 +216,7 @@ export async function performSiteCheck(
     });
 
     let alertSent = false;
+    let alertError: string | undefined;
     const chatId = site.user.telegramChatId ?? process.env.TELEGRAM_CHAT_ID;
     if (
       analysis.hasChanges &&
@@ -204,21 +225,34 @@ export async function performSiteCheck(
       chatId &&
       isTelegramConfigured()
     ) {
-      await sendTelegramMessage({
-        chatId,
-        text: formatAlert(site, analysis),
-      });
-      alertSent = true;
+      // Проверка уже записана в БД, поэтому сбой доставки не отменяет её:
+      // результат возвращается с текстом ошибки алерта.
+      try {
+        await sendTelegramMessage({
+          chatId,
+          text: formatAlert(site, analysis),
+        });
+        alertSent = true;
+      } catch (error) {
+        console.error("Alert Error Details:", error);
+        alertError = `Не удалось отправить Telegram-алерт: ${errorMessage(error)}`;
+      }
     }
 
-    return { siteId: site.id, status: "analyzed", analysis, alertSent };
+    return {
+      siteId: site.id,
+      status: "analyzed",
+      analysis,
+      alertSent,
+      alertError,
+    };
   } catch (error) {
     console.error("Check Persist Error Details:", error);
     return {
       siteId: site.id,
       status: "failed",
       failedStage: "persist",
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     };
   }
 }
@@ -302,7 +336,19 @@ export async function runCheckWorker(
 
   const results: SiteCheckResult[] = [];
   for (const site of sites) {
-    results.push(await checkSite(site, allowedSiteIds, dailyChecksLeft, now));
+    // Падение одного сайта не должно обрывать весь прогон: ошибка попадает
+    // в результат этого сайта, остальные проверяются дальше.
+    try {
+      results.push(await checkSite(site, allowedSiteIds, dailyChecksLeft, now));
+    } catch (error) {
+      console.error("Check Worker Error Details:", site.id, error);
+      results.push({
+        siteId: site.id,
+        status: "failed",
+        failedStage: "persist",
+        error: errorMessage(error),
+      });
+    }
   }
 
   return { startedAt, finishedAt: new Date(), results };

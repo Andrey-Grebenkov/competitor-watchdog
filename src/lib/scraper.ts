@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
+import { errorMessage } from "@/lib/errors";
 
 export const SCREENSHOT_DIR = "/tmp/screenshots";
 
@@ -53,7 +54,14 @@ export async function captureScreenshot({
   cssSelector,
   timeoutMs = NAVIGATION_TIMEOUT_MS,
 }: CaptureOptions): Promise<CaptureResult> {
-  await mkdir(SCREENSHOT_DIR, { recursive: true });
+  try {
+    await mkdir(SCREENSHOT_DIR, { recursive: true });
+  } catch (error) {
+    throw new ScrapeError(
+      `Не удалось создать каталог для снимков ${SCREENSHOT_DIR}: ${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
   const screenshotPath = path.join(SCREENSHOT_DIR, `${randomUUID()}.png`);
 
   let browser: Browser | undefined;
@@ -98,12 +106,17 @@ export async function captureScreenshot({
     };
   } catch (error) {
     console.error("Playwright Error Details:", error);
-    const details = error instanceof Error ? error.message : String(error);
+    const details = errorMessage(error);
     throw new ScrapeError(
       `Ошибка загрузки сайта (Playwright): ${details.split("\n")[0]}`,
       { cause: error },
     );
   } finally {
-    await browser?.close();
+    // Ошибка закрытия не должна подменять исходную причину сбоя.
+    try {
+      await browser?.close();
+    } catch (error) {
+      console.error("Playwright Close Error Details:", error);
+    }
   }
 }
