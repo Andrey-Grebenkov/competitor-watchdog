@@ -40,6 +40,20 @@ npm run dev
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/check
 ```
 
+## Тесты
+
+Юнит-тесты живут рядом с модулями (`src/lib/*.test.ts`), запускаются Vitest
+(окружение `node`, внешние зависимости — Prisma, Playwright, Gemini, Telegram —
+подменяются моками):
+
+```bash
+npm test              # один прогон
+npm run test:watch    # watch-режим
+npm run test:coverage # отчёт о покрытии (text + html в coverage/)
+```
+
+Покрытие считается по `src/lib` (без `prisma.ts` и `ui.ts`).
+
 ## Тарифы
 
 | Тариф     | Сайтов     | Минимальный интервал | Проверок за 24 ч | Эталонов за 24 ч | Алерты   |
