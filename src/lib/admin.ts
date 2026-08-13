@@ -1,4 +1,5 @@
 import type { User } from "@prisma/client";
+import { jsonError, requireUser } from "@/lib/apiAuth";
 import { getCurrentUser } from "@/lib/currentUser";
 
 export function isAdmin(user: User): boolean {
@@ -19,16 +20,12 @@ export async function requireAdmin(): Promise<
   | { admin: User; response?: undefined }
   | { admin?: undefined; response: Response }
 > {
-  const user = await getCurrentUser();
-  if (!user) {
-    return {
-      response: Response.json({ error: "Не авторизован" }, { status: 401 }),
-    };
+  const authorized = await requireUser();
+  if (authorized.response) {
+    return { response: authorized.response };
   }
-  if (!isAdmin(user)) {
-    return {
-      response: Response.json({ error: "Доступ запрещён" }, { status: 403 }),
-    };
+  if (!isAdmin(authorized.user)) {
+    return { response: jsonError("Доступ запрещён", 403) };
   }
-  return { admin: user };
+  return { admin: authorized.user };
 }

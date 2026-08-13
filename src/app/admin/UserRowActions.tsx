@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { ActionError } from "@/components/ActionError";
 import { ghostButton, ghostButtonDanger } from "@/lib/ui";
+import { jsonRequest, useApiAction } from "@/lib/useApiAction";
 
 export function UserRowActions({
   userId,
@@ -15,44 +15,16 @@ export function UserRowActions({
   isUnlimited: boolean;
   isSelf: boolean;
 }) {
-  const router = useRouter();
-  const [pending, setPending] = useState<"toggle" | "delete" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const request = async (
-    action: "toggle" | "delete",
-    init: RequestInit,
-    fallback: string,
-  ) => {
-    setPending(action);
-    setError(null);
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, init);
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        setError(body?.error ?? fallback);
-        return;
-      }
-      router.refresh();
-    } catch {
-      setError(fallback);
-    } finally {
-      setPending(null);
-    }
-  };
+  const { error, busy, isPending, run } = useApiAction();
+  const url = `/api/admin/users/${userId}`;
 
   const handleToggle = () =>
-    request(
-      "toggle",
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isUnlimited: !isUnlimited }),
-      },
-      "Не удалось изменить тариф",
-    );
+    run({
+      key: "toggle",
+      url,
+      init: jsonRequest("PATCH", { isUnlimited: !isUnlimited }),
+      fallbackError: "Не удалось изменить тариф",
+    });
 
   const handleDelete = () => {
     if (
@@ -60,11 +32,12 @@ export function UserRowActions({
     ) {
       return;
     }
-    return request(
-      "delete",
-      { method: "DELETE" },
-      "Не удалось удалить аккаунт",
-    );
+    return run({
+      key: "delete",
+      url,
+      init: { method: "DELETE" },
+      fallbackError: "Не удалось удалить аккаунт",
+    });
   };
 
   return (
@@ -73,10 +46,10 @@ export function UserRowActions({
         <button
           type="button"
           onClick={handleToggle}
-          disabled={pending !== null}
+          disabled={busy}
           className={`${ghostButton} whitespace-nowrap`}
         >
-          {pending === "toggle"
+          {isPending("toggle")
             ? "Сохраняем…"
             : isUnlimited
               ? "Снять безлимит"
@@ -85,16 +58,14 @@ export function UserRowActions({
         <button
           type="button"
           onClick={handleDelete}
-          disabled={pending !== null || isSelf}
+          disabled={busy || isSelf}
           title={isSelf ? "Нельзя удалить свой аккаунт" : undefined}
           className={`${ghostButtonDanger} whitespace-nowrap`}
         >
-          {pending === "delete" ? "Удаляем…" : "Удалить аккаунт"}
+          {isPending("delete") ? "Удаляем…" : "Удалить аккаунт"}
         </button>
       </div>
-      {error ? (
-        <span className="px-3 text-xs text-red-600">{error}</span>
-      ) : null}
+      <ActionError message={error} />
     </div>
   );
 }

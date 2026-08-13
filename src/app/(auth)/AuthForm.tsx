@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
-import { card, ghostButton, input, primaryButton } from "@/lib/ui";
+import { SubmitButton } from "@/components/SubmitButton";
+import { card, errorText, ghostButton, input, mutedText } from "@/lib/ui";
 import type { AuthFormState } from "./actions";
 
 type AuthAction = (
@@ -35,24 +35,6 @@ const COPY = {
   },
 } as const;
 
-function SubmitButton({
-  label,
-  pendingLabel,
-}: {
-  label: string;
-  pendingLabel: string;
-}) {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending} className={primaryButton}>
-      {pending ? (
-        <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-      ) : null}
-      {pending ? pendingLabel : label}
-    </button>
-  );
-}
-
 export function AuthForm({ mode, action }: AuthFormProps) {
   const [state, formAction] = useActionState<AuthFormState, FormData>(
     action,
@@ -66,9 +48,7 @@ export function AuthForm({ mode, action }: AuthFormProps) {
     <main className="mx-auto flex max-w-md flex-col gap-6 px-6 py-20">
       <div>
         <h1 className="text-2xl font-semibold">{copy.title}</h1>
-        <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-          Competitor Watchdog
-        </p>
+        <p className={`mt-1 ${mutedText}`}>Competitor Watchdog</p>
       </div>
 
       <form action={formAction} className={`flex flex-col gap-4 p-6 ${card}`}>
@@ -112,14 +92,12 @@ export function AuthForm({ mode, action }: AuthFormProps) {
           />
         </label>
 
-        {state.error ? (
-          <p className="text-sm text-red-600">{state.error}</p>
-        ) : null}
+        {state.error ? <p className={errorText}>{state.error}</p> : null}
 
         <SubmitButton label={copy.submit} pendingLabel={copy.pending} />
       </form>
 
-      <p className="flex flex-wrap items-center gap-1 text-sm text-black/60 dark:text-white/60">
+      <p className={`flex flex-wrap items-center gap-1 ${mutedText}`}>
         {copy.hint}
         <Link href={copy.href} className={ghostButton}>
           {copy.linkText}

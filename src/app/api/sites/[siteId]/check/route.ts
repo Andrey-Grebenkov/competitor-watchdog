@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
+import { jsonError, requireUser } from "@/lib/apiAuth";
 import { performSiteCheck } from "@/lib/checkWorker";
-import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { dailyLimitMessage, getUserQuota } from "@/lib/quota";
 
@@ -10,9 +10,9 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ siteId: string }> },
 ) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return Response.json({ error: "Не авторизован" }, { status: 401 });
+  const { user, response } = await requireUser();
+  if (response) {
+    return response;
   }
 
   const { siteId } = await params;
@@ -20,12 +20,12 @@ export async function POST(
     where: { id: siteId, userId: user.id },
   });
   if (!site) {
-    return Response.json({ error: "Сайт не найден" }, { status: 404 });
+    return jsonError("Сайт не найден", 404);
   }
 
   const quota = await getUserQuota(user);
   if (quota.dailyChecksExhausted) {
-    return Response.json({ error: dailyLimitMessage(quota) }, { status: 429 });
+    return jsonError(dailyLimitMessage(quota), 429);
   }
 
   const result = await performSiteCheck({ ...site, user });

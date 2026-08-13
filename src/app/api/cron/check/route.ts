@@ -1,4 +1,6 @@
+import { jsonError } from "@/lib/apiAuth";
 import { runCheckWorker } from "@/lib/checkWorker";
+import { errorMessage } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -13,16 +15,13 @@ function isAuthorized(request: Request): boolean {
 
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonError("Unauthorized", 401);
   }
 
   try {
     const run = await runCheckWorker();
     return Response.json(run);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: 500 },
-    );
+    return jsonError(errorMessage(error), 500);
   }
 }

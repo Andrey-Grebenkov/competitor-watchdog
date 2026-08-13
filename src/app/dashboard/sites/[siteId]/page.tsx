@@ -2,17 +2,12 @@ import path from "node:path";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/currentUser";
+import { formatDateTime } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { badge, card, ghostButton } from "@/lib/ui";
+import { badge, card, ghostButton, mutedText, subtleText } from "@/lib/ui";
 import { ScreenshotGallery, type ScreenshotItem } from "./ScreenshotGallery";
 
 export const dynamic = "force-dynamic";
-
-const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
-  dateStyle: "short",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
 
 function screenshotSrc(filePath: string): string {
   return `/api/screenshots/${encodeURIComponent(path.basename(filePath))}`;
@@ -43,9 +38,7 @@ export default async function SiteHistoryPage({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{site.name}</h1>
-          <p className="text-xs break-all text-black/50 dark:text-white/50">
-            {site.url}
-          </p>
+          <p className={`break-all ${subtleText}`}>{site.url}</p>
         </div>
         <Link href="/dashboard" className={ghostButton}>
           К списку сайтов
@@ -54,9 +47,7 @@ export default async function SiteHistoryPage({
 
       <section className="mt-8 flex flex-col gap-4">
         {site.history.length === 0 ? (
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Проверок пока не было.
-          </p>
+          <p className={mutedText}>Проверок пока не было.</p>
         ) : (
           site.history.map((check) => {
             const items: ScreenshotItem[] = [
@@ -90,15 +81,15 @@ export default async function SiteHistoryPage({
                         : "Изменений не обнаружено"}
                     </span>
                   )}
-                  <time className="text-xs text-black/50 dark:text-white/50">
-                    {dateFormatter.format(check.checkedAt)}
+                  <time className={subtleText}>
+                    {formatDateTime(check.checkedAt)}
                   </time>
                 </div>
 
                 <ScreenshotGallery items={items} />
 
                 {check.diffRatio !== null && !check.isBaseline ? (
-                  <p className="mt-2 text-xs text-black/50 dark:text-white/50">
+                  <p className={`mt-2 ${subtleText}`}>
                     Изменилось пикселей: {(check.diffRatio * 100).toFixed(2)}%
                   </p>
                 ) : null}

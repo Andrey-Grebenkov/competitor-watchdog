@@ -1,14 +1,14 @@
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/currentUser";
+import { jsonError, requireUser } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ siteId: string }> },
 ) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return Response.json({ error: "Не авторизован" }, { status: 401 });
+  const { user, response } = await requireUser();
+  if (response) {
+    return response;
   }
 
   const { siteId } = await params;
@@ -17,7 +17,7 @@ export async function DELETE(
     select: { id: true },
   });
   if (!site) {
-    return Response.json({ error: "Сайт не найден" }, { status: 404 });
+    return jsonError("Сайт не найден", 404);
   }
 
   await prisma.$transaction([

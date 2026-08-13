@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { AppError, errorMessage } from "@/lib/errors";
 
 export const DEFAULT_GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
@@ -63,11 +64,8 @@ export const analysisSchema = z.object({
 export type Change = z.infer<typeof changeSchema>;
 export type AnalysisResult = z.infer<typeof analysisSchema>;
 
-export class AiAnalysisError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = "AiAnalysisError";
-  }
+export class AiAnalysisError extends AppError {
+  readonly name = "AiAnalysisError";
 }
 
 const SYSTEM_PROMPT = `You compare two screenshots of a competitor's web page: the first image is the previous state, the second is the current state.
@@ -214,7 +212,7 @@ export async function analyzeScreenshots(
     } catch (error) {
       console.error("Vision API Error Details:", error);
       throw new AiAnalysisError(
-        `Vision API недоступен: ${error instanceof Error ? error.message : String(error)}`,
+        `Vision API недоступен: ${errorMessage(error)}`,
         { cause: error },
       );
     }

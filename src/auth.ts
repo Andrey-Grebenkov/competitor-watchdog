@@ -2,6 +2,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { compare } from "bcryptjs";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { normalizeEmail } from "@/lib/input";
 import { prisma } from "@/lib/prisma";
 
 declare module "next-auth" {
@@ -26,9 +27,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Пароль", type: "password" },
       },
       authorize: async (credentials) => {
-        const email = String(credentials?.email ?? "")
-          .trim()
-          .toLowerCase();
+        const email = normalizeEmail(credentials?.email);
         const password = String(credentials?.password ?? "");
         if (!email || !password) {
           return null;

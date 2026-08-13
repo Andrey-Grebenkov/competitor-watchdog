@@ -1,21 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { card, input, primaryButton } from "@/lib/ui";
+import { SubmitButton } from "@/components/SubmitButton";
+import { card, errorText, input } from "@/lib/ui";
 import { addSite, type AddSiteState } from "./actions";
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending} className={primaryButton}>
-      {pending ? (
-        <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-      ) : null}
-      {pending ? "Добавляем…" : "Добавить сайт"}
-    </button>
-  );
-}
 
 export function AddSiteForm() {
   const [state, formAction] = useActionState<AddSiteState, FormData>(
@@ -74,9 +62,9 @@ export function AddSiteForm() {
       </label>
 
       <div className="sm:col-span-2">
-        <SubmitButton />
+        <SubmitButton label="Добавить сайт" pendingLabel="Добавляем…" />
         {state.error ? (
-          <p className="mt-3 text-sm text-red-600">{state.error}</p>
+          <p className={`mt-3 ${errorText}`}>{state.error}</p>
         ) : null}
         {state.notice ? (
           <p className="mt-3 text-sm text-amber-600">{state.notice}</p>

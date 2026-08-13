@@ -6,6 +6,7 @@ import {
   MAX_FEEDBACK_LENGTH,
   isFeedbackType,
 } from "@/lib/feedback";
+import { formString, isValidEmail, normalizeEmail } from "@/lib/input";
 import { prisma } from "@/lib/prisma";
 import {
   escapeHtml,
@@ -18,14 +19,12 @@ export interface FeedbackFormState {
   success?: boolean;
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export async function submitFeedback(
   _prevState: FeedbackFormState,
   formData: FormData,
 ): Promise<FeedbackFormState> {
-  const type = String(formData.get("type") ?? "");
-  const message = String(formData.get("message") ?? "").trim();
+  const type = formString(formData, "type", { trim: false });
+  const message = formString(formData, "message");
 
   if (!isFeedbackType(type)) {
     return { error: "Выберите тип отзыва" };
@@ -40,11 +39,9 @@ export async function submitFeedback(
   }
 
   const user = await getCurrentUser();
-  const userEmail = (user?.email ?? String(formData.get("userEmail") ?? ""))
-    .trim()
-    .toLowerCase();
+  const userEmail = normalizeEmail(user?.email ?? formData.get("userEmail"));
 
-  if (!EMAIL_PATTERN.test(userEmail)) {
+  if (!isValidEmail(userEmail)) {
     return { error: "Укажите корректный email для связи" };
   }
 

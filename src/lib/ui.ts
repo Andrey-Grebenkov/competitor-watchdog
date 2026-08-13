@@ -16,6 +16,24 @@ export const card =
 export const input =
   "rounded-lg border border-black/15 bg-white px-3 py-2 shadow-sm transition outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-white/20 dark:bg-transparent";
 
+export const errorText = "text-sm text-red-600";
+
+export const inlineErrorText = "px-3 text-xs text-red-600";
+
+export const mutedText = "text-sm text-black/60 dark:text-white/60";
+
+export const subtleText = "text-xs text-black/50 dark:text-white/50";
+
+export const tableHeadRow =
+  "border-b border-black/10 text-left text-slate-500 dark:border-white/15 dark:text-slate-400";
+
+export const tableBodyRow =
+  "border-b border-black/5 transition last:border-0 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5";
+
+export const tableCell = "px-4 py-3";
+
+export const tableHeadCell = "px-4 py-3 font-medium";
+
 const badgeBase =
   "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset";
 

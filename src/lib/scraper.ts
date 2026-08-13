@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
+import { AppError, errorMessage } from "@/lib/errors";
 
 export const SCREENSHOT_DIR = "/tmp/screenshots";
 
@@ -22,11 +23,8 @@ export interface CaptureOptions {
 }
 
 /** Сбой на этапе снятия скриншота (навигация, таймаут, селектор). */
-export class ScrapeError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = "ScrapeError";
-  }
+export class ScrapeError extends AppError {
+  readonly name = "ScrapeError";
 }
 
 export interface CaptureResult {
@@ -98,7 +96,7 @@ export async function captureScreenshot({
     };
   } catch (error) {
     console.error("Playwright Error Details:", error);
-    const details = error instanceof Error ? error.message : String(error);
+    const details = errorMessage(error);
     throw new ScrapeError(
       `Ошибка загрузки сайта (Playwright): ${details.split("\n")[0]}`,
       { cause: error },

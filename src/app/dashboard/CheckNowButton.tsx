@@ -1,50 +1,30 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { ActionError } from "@/components/ActionError";
 import { ghostButton } from "@/lib/ui";
+import { useApiAction } from "@/lib/useApiAction";
 
 export function CheckNowButton({ siteId }: { siteId: string }) {
-  const router = useRouter();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, busy, run } = useApiAction();
 
-  const handleClick = async () => {
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/sites/${siteId}/check`, {
-        method: "POST",
-      });
-      const body = (await response.json().catch(() => null)) as {
-        ok?: boolean;
-        error?: string;
-      } | null;
-      if (!response.ok || body?.ok === false) {
-        setError(body?.error ?? "Не удалось выполнить проверку");
-        return;
-      }
-      router.refresh();
-    } catch {
-      setError("Не удалось выполнить проверку");
-    } finally {
-      setPending(false);
-    }
-  };
+  const handleClick = () =>
+    run({
+      url: `/api/sites/${siteId}/check`,
+      init: { method: "POST" },
+      fallbackError: "Не удалось выполнить проверку",
+    });
 
   return (
     <span className="flex flex-col items-start">
       <button
         type="button"
         onClick={handleClick}
-        disabled={pending}
+        disabled={busy}
         className={`${ghostButton} whitespace-nowrap`}
       >
-        {pending ? "Проверяем…" : "Проверить сейчас"}
+        {busy ? "Проверяем…" : "Проверить сейчас"}
       </button>
-      {error ? (
-        <span className="px-3 text-xs text-red-600">{error}</span>
-      ) : null}
+      <ActionError message={error} />
     </span>
   );
 }

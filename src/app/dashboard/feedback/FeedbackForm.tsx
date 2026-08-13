@@ -1,30 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
+import { SubmitButton } from "@/components/SubmitButton";
 import {
   FEEDBACK_TYPES,
   FEEDBACK_TYPE_LABELS,
   MAX_FEEDBACK_LENGTH,
 } from "@/lib/feedback";
-import { card, input, primaryButton } from "@/lib/ui";
+import { card, errorText, input, mutedText } from "@/lib/ui";
 import { submitFeedback, type FeedbackFormState } from "./actions";
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className={`self-start ${primaryButton}`}
-    >
-      {pending ? (
-        <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-      ) : null}
-      {pending ? "Отправляем…" : "Отправить"}
-    </button>
-  );
-}
 
 export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
   const [state, formAction] = useActionState<FeedbackFormState, FormData>(
@@ -43,9 +27,7 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
   return (
     <form action={formAction} className={`flex flex-col gap-4 p-6 ${card}`}>
       {userEmail ? (
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Отзыв будет отправлен от {userEmail}
-        </p>
+        <p className={mutedText}>Отзыв будет отправлен от {userEmail}</p>
       ) : (
         <label className="flex flex-col gap-1 text-sm">
           Email для связи
@@ -93,11 +75,13 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
         />
       </label>
 
-      {state.error ? (
-        <p className="text-sm text-red-600">{state.error}</p>
-      ) : null}
+      {state.error ? <p className={errorText}>{state.error}</p> : null}
 
-      <SubmitButton />
+      <SubmitButton
+        label="Отправить"
+        pendingLabel="Отправляем…"
+        className="self-start"
+      />
     </form>
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/currentUser";
-import { badge, card, ghostButton, primaryButton } from "@/lib/ui";
+import { badge, card, ghostButton, mutedText, primaryButton } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -82,9 +82,7 @@ export default async function Home() {
             className={`p-5 transition hover:shadow-md ${card}`}
           >
             <h2 className="font-medium">{feature.title}</h2>
-            <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-              {feature.description}
-            </p>
+            <p className={`mt-2 ${mutedText}`}>{feature.description}</p>
           </div>
         ))}
       </section>

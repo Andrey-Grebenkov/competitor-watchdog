@@ -4,25 +4,22 @@ import { hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/auth";
+import { formString, isValidEmail, normalizeEmail } from "@/lib/input";
 import { prisma } from "@/lib/prisma";
 
 export interface AuthFormState {
   error?: string;
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export async function registerUser(
   _prevState: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
+  const email = normalizeEmail(formData.get("email"));
+  const password = formString(formData, "password", { trim: false });
+  const name = formString(formData, "name");
 
-  if (!EMAIL_PATTERN.test(email)) {
+  if (!isValidEmail(email)) {
     return { error: "Укажите корректный email" };
   }
   if (password.length < 8) {
@@ -50,10 +47,8 @@ export async function loginUser(
   _prevState: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-  const password = String(formData.get("password") ?? "");
+  const email = normalizeEmail(formData.get("email"));
+  const password = formString(formData, "password", { trim: false });
 
   try {
     await signIn("credentials", { email, password, redirect: false });
