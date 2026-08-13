@@ -50,6 +50,8 @@ export async function POST(
     ok: true,
     status: result.status,
     skipReason: result.skipReason,
+    // Сбой доставки алерта не отменяет проверку, но виден в UI.
+    alertError: result.alertError,
     summary: result.analysis?.summary,
     hasChanges: result.analysis?.hasChanges ?? false,
   });
