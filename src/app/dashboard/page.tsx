@@ -1,17 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOutUser } from "@/app/(auth)/actions";
 import { nextCheckLabel } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { formatDateTime } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import { planLabel } from "@/lib/plans";
-import {
-  baselineQuotaLabel,
-  checksQuotaLabel,
-  getUserQuota,
-  sitesQuotaLabel,
-} from "@/lib/quota";
 import {
   badge,
   card,
@@ -39,7 +31,6 @@ export default async function DashboardPage() {
   }
 
   const now = new Date();
-  const quota = await getUserQuota(user, now);
 
   const sites = await prisma.watchedSite.findMany({
     where: { userId: user.id },
@@ -52,35 +43,8 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Отслеживаемые сайты</h1>
-          <p className={mutedText}>
-            {user.email} · Тариф {planLabel(quota.planName)} · Сайты:{" "}
-            {sitesQuotaLabel(quota)} · Проверки сегодня:{" "}
-            {checksQuotaLabel(quota)} · Лимит эталонов сегодня:{" "}
-            {baselineQuotaLabel(quota)} · минимальный интервал{" "}
-            {quota.limits.minIntervalHours} ч
-          </p>
-        </div>
-        <nav className="flex items-center gap-1">
-          {user.role === "ADMIN" ? (
-            <Link href="/admin" className={ghostButton}>
-              Админ-панель
-            </Link>
-          ) : null}
-          <Link href="/dashboard/feedback" className={ghostButton}>
-            Обратная связь
-          </Link>
-          <Link href="/" className={ghostButton}>
-            На главную
-          </Link>
-          <form action={signOutUser}>
-            <button type="submit" className={ghostButton}>
-              Выйти
-            </button>
-          </form>
-        </nav>
+      <header>
+        <h1 className="text-2xl font-semibold">Отслеживаемые сайты</h1>
       </header>
 
       <section className="mt-8">
