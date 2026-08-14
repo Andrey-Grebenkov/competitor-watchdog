@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User, WatchedSite } from "@prisma/client";
 import {
@@ -18,6 +19,10 @@ import { ScrapeError, captureScreenshot } from "@/lib/scraper";
 import { isTelegramConfigured, sendTelegramMessage } from "@/lib/telegram";
 import { makeSite, makeUser } from "@/test/factories";
 
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, access: vi.fn() };
+});
 vi.mock("@/lib/aiAnalyzer", async () => {
   const actual = await import("@/lib/aiAnalyzer");
   return { ...actual, analyzeScreenshots: vi.fn() };
@@ -48,6 +53,7 @@ vi.mock("@/lib/prisma", () => ({
 const analyzeMock = vi.mocked(analyzeScreenshots);
 const diffMock = vi.mocked(createDiffImage);
 const captureMock = vi.mocked(captureScreenshot);
+const accessMock = vi.mocked(access);
 const dailyChecksMock = vi.mocked(getUserDailyChecksCount);
 const telegramConfiguredMock = vi.mocked(isTelegramConfigured);
 const sendTelegramMock = vi.mocked(sendTelegramMessage);
@@ -90,6 +96,7 @@ beforeEach(() => {
   diffMock
     .mockReset()
     .mockResolvedValue({ diffPath: "/tmp/screenshots/d-diff.png", diffRatio: 0.2 });
+  accessMock.mockReset().mockResolvedValue(undefined);
   dailyChecksMock.mockReset().mockResolvedValue(0);
   telegramConfiguredMock.mockReset().mockReturnValue(true);
   sendTelegramMock.mockReset().mockResolvedValue(undefined);
@@ -172,6 +179,33 @@ describe("performSiteCheck", () => {
       skipReason: "no_baseline",
     });
     expect(transactionMock).toHaveBeenCalledTimes(1);
+    expect(analyzeMock).not.toHaveBeenCalled();
+    expect(createCheckMock).toHaveBeenCalledWith({
+      data: {
+        siteId: site.id,
+        screenshotUrl: "/tmp/screenshots/new.png",
+        isBaseline: true,
+      },
+    });
+    expect(vi.mocked(prisma.baselineEvent.create)).toHaveBeenCalledWith({
+      data: { userId: site.userId, siteId: site.id, siteUrl: site.url },
+    });
+  });
+
+  it("re-baselines when the previous screenshot is missing", async () => {
+    findFirstMock.mockResolvedValue({
+      screenshotUrl: "/tmp/screenshots/missing.png",
+    } as never);
+    accessMock.mockRejectedValue(new Error("ENOENT"));
+    const site = siteWithUser();
+
+    const result = await performSiteCheck(site);
+
+    expect(result).toEqual({
+      siteId: site.id,
+      status: "skipped",
+      skipReason: "no_baseline",
+    });
     expect(analyzeMock).not.toHaveBeenCalled();
     expect(createCheckMock).toHaveBeenCalledWith({
       data: {
@@ -374,7 +408,7 @@ describe("performSiteCheck", () => {
     );
   });
 
-  it("reports a persist failure when the alert cannot be delivered", async () => {
+  it("reports an alert delivery error without failing the check", async () => {
     findFirstMock.mockResolvedValue({
       screenshotUrl: "/tmp/screenshots/old.png",
     } as never);
@@ -389,9 +423,9 @@ describe("performSiteCheck", () => {
     );
 
     expect(result).toMatchObject({
-      status: "failed",
-      failedStage: "persist",
-      error: "Telegram API returned 400",
+      status: "analyzed",
+      alertSent: false,
+      alertError: "Не удалось отправить Telegram-алерт: Telegram API returned 400",
     });
   });
 
@@ -499,5 +533,41 @@ describe("runCheckWorker", () => {
 
     expect(results[0]).toMatchObject({ status: "analyzed" });
     expect(captureMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not consume the daily quota on a failed analysis", async () => {
+    const owner = makeUser({ subscriptionStatus: "premium" });
+    const sites = [1, 2].map((index) => ({
+      ...makeSite({ id: `site-${index}`, userId: owner.id }),
+      user: owner,
+    }));
+    findManyMock.mockResolvedValue(sites as never);
+    dailyChecksMock.mockResolvedValue(599);
+    findFirstMock
+      .mockResolvedValueOnce({
+        checkedAt: new Date(NOW.getTime() - 48 * HOUR_MS),
+      } as never)
+      .mockResolvedValueOnce({
+        screenshotUrl: "/tmp/screenshots/old1.png",
+      } as never)
+      .mockResolvedValueOnce({
+        checkedAt: new Date(NOW.getTime() - 48 * HOUR_MS),
+      } as never)
+      .mockResolvedValueOnce({
+        screenshotUrl: "/tmp/screenshots/old2.png",
+      } as never);
+    analyzeMock
+      .mockRejectedValueOnce(new AiAnalysisError("model gone"))
+      .mockResolvedValueOnce(NO_CHANGES);
+
+    const { results } = await runCheckWorker(NOW);
+
+    expect(results[0]).toMatchObject({
+      status: "failed",
+      failedStage: "analysis",
+    });
+    expect(results[1]).toMatchObject({ status: "analyzed" });
+    expect(createCheckMock).toHaveBeenCalledTimes(1);
+    expect(dailyChecksMock).toHaveBeenCalledTimes(1);
   });
 });

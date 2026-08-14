@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import type { User, WatchedSite } from "@prisma/client";
 import {
   analyzeScreenshots,
@@ -93,6 +94,15 @@ function isIntervalElapsed(
   return elapsedHours >= intervalHours;
 }
 
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function formatAlert(site: WatchedSite, analysis: AnalysisResult): string {
   const changes = analysis.changes
     .map(
@@ -159,6 +169,30 @@ export async function performSiteCheck(
 
   try {
     if (!lastCheck) {
+      await prisma.$transaction([
+        prisma.checkHistory.create({
+          data: {
+            siteId: site.id,
+            screenshotUrl: screenshotPath,
+            isBaseline: true,
+          },
+        }),
+        prisma.baselineEvent.create({
+          data: {
+            userId: site.userId,
+            siteId: site.id,
+            siteUrl: site.url,
+          },
+        }),
+      ]);
+      return { siteId: site.id, status: "skipped", skipReason: "no_baseline" };
+    }
+
+    if (!(await fileExists(lastCheck.screenshotUrl))) {
+      console.error(
+        "Previous screenshot missing, creating new baseline:",
+        lastCheck.screenshotUrl,
+      );
       await prisma.$transaction([
         prisma.checkHistory.create({
           data: {
@@ -298,7 +332,12 @@ async function checkSite(
   }
   dailyChecksLeft.set(site.userId, checksLeft - 1);
 
-  return performSiteCheck(site);
+  const result = await performSiteCheck(site);
+  if (result.status === "failed") {
+    dailyChecksLeft.set(site.userId, checksLeft);
+  }
+
+  return result;
 }
 
 export async function runCheckWorker(

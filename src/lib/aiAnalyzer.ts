@@ -5,35 +5,19 @@ import { AppError, errorMessage } from "@/lib/errors";
 export const DEFAULT_GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
 
-export const DEFAULT_VISION_MODEL = "gemini-2.0-flash";
-
-/** Запасные модели, если основная недоступна (404 от провайдера). */
-export const FALLBACK_VISION_MODELS = [
-  DEFAULT_VISION_MODEL,
-  "gemini-1.5-flash-8b",
-  "gemini-2.0-flash-lite",
-] as const;
+export const DEFAULT_VISION_MODEL = "gemini-3.6-flash";
 
 /**
- * Приводит имя модели к виду, который принимает v1beta REST API: снимает
- * префикс `models/` (он добавляется в пути URL) и дополняет `gemini-1.5-flash`
- * до `gemini-1.5-flash-latest`.
+ * Приводит имя модели к виду, который принимает v1beta REST API:
+ * снимает префикс `models/` (он добавляется в пути URL).
  */
 function normalizeModel(model: string): string {
-  const name = model.trim().replace(/^models\//, "");
-  return name === "gemini-1.5-flash" ? "gemini-1.5-flash-latest" : name;
+  return model.trim().replace(/^models\//, "");
 }
 
 export const VISION_MODEL = normalizeModel(
-  process.env.GEMINI_MODEL?.trim() ||
-    process.env.OPENAI_VISION_MODEL?.trim() ||
-    DEFAULT_VISION_MODEL,
+  process.env.GEMINI_MODEL?.trim() || DEFAULT_VISION_MODEL,
 );
-
-/** Модели в порядке попыток, без повторов. */
-export const VISION_MODEL_CHAIN: string[] = [
-  ...new Set([VISION_MODEL, ...FALLBACK_VISION_MODELS]),
-];
 
 /** База без завершающих слешей — иначе Gemini отвечает 404. */
 export const GEMINI_API_BASE = (
@@ -129,16 +113,14 @@ const availableModelsSchema = z.object({
   models: z.array(z.object({ name: z.string().optional() })).optional(),
 });
 
-/**
- * Вердикт на случай, когда ответ модели пуст или не разбирается: проверка
- * завершается успешно и пайплайн не ломается.
- */
-export const UNPARSEABLE_ANALYSIS: AnalysisResult = {
-  hasChanges: false,
-  summary: "Не удалось распарсить текстовый ответ от ИИ.",
-  urgency: "low",
-  changes: [],
-};
+/** Количество повторов при таймауте fetch. */
+const AI_FETCH_RETRIES = 2;
+
+/** Таймаут запроса к Gemini, мс. */
+const AI_FETCH_TIMEOUT_MS = 60_000;
+
+/** Таймаут вспомогательного запроса списка моделей, мс. */
+const LIST_MODELS_TIMEOUT_MS = 10_000;
 
 /**
  * Готовит текст к `JSON.parse`: снимает markdown-обёртку ```json ... ``` (даже
@@ -158,6 +140,14 @@ function isAuthMessage(message: string): boolean {
   );
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" ||
+      (error as { code?: string }).code === "ABORT_ERR")
+  );
+}
+
 async function toBase64(filePath: string): Promise<string> {
   try {
     const buffer = await readFile(filePath);
@@ -170,13 +160,13 @@ async function toBase64(filePath: string): Promise<string> {
 }
 
 /**
- * Диагностика на случай, когда все модели цепочки отдали 404: печатает список
- * моделей, доступных этому ключу.
+ * Диагностика на случай 404: печатает список моделей, доступных этому ключу.
  */
 async function logAvailableModels(apiKey: string): Promise<void> {
   try {
     const response = await fetch(
       `${GEMINI_API_BASE}/models?key=${encodeURIComponent(apiKey)}`,
+      { signal: AbortSignal.timeout(LIST_MODELS_TIMEOUT_MS) },
     );
     const rawBody = await response.text();
     const parsed = availableModelsSchema.safeParse(
@@ -229,53 +219,51 @@ export async function analyzeScreenshots(
   });
 
   let response: Response | undefined;
-  let rawBody = "";
-  for (const [index, model] of VISION_MODEL_CHAIN.entries()) {
+  for (let attempt = 0; attempt <= AI_FETCH_RETRIES; attempt++) {
     try {
-      response = await fetch(geminiEndpoint(model), {
+      response = await fetch(geminiEndpoint(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
         },
         body: requestBody,
+        signal: AbortSignal.timeout(AI_FETCH_TIMEOUT_MS),
       });
+      break;
     } catch (error) {
+      if (isAbortError(error) && attempt < AI_FETCH_RETRIES) {
+        console.error(
+          `Vision API request timed out (attempt ${attempt + 1}), retrying...`,
+        );
+        continue;
+      }
       console.error("Vision API Error Details:", error);
+      if (isAbortError(error)) {
+        throw new AiAnalysisError("Vision API request timed out", {
+          cause: error,
+        });
+      }
       throw new AiAnalysisError(
         `Vision API недоступен: ${errorMessage(error)}`,
         { cause: error },
       );
     }
-
-    try {
-      rawBody = await response.text();
-    } catch (error) {
-      console.error("Vision API Error Details:", error);
-      throw new AiAnalysisError(
-        `Не удалось прочитать ответ Vision API: ${errorMessage(error)}`,
-        { cause: error },
-      );
-    }
-
-    if (response.status !== 404) {
-      break;
-    }
-
-    const next = VISION_MODEL_CHAIN[index + 1];
-    console.error(
-      "Vision API Error Details:",
-      next
-        ? `модель ${model} недоступна (404), пробуем ${next}`
-        : `модель ${model} недоступна (404), фолбэки исчерпаны`,
-    );
-    if (!next) {
-      await logAvailableModels(apiKey);
-    }
   }
 
   if (!response) {
-    throw new AiAnalysisError("Vision API не вернул ответ");
+    throw new AiAnalysisError("Vision API request timed out");
+  }
+
+  let rawBody = "";
+  try {
+    rawBody = await response.text();
+  } catch (error) {
+    console.error("Vision API Error Details:", error);
+    throw new AiAnalysisError(
+      `Не удалось прочитать ответ Vision API: ${errorMessage(error)}`,
+      { cause: error },
+    );
   }
 
   if (!rawBody || !rawBody.trim()) {
@@ -285,13 +273,11 @@ export async function analyzeScreenshots(
         `Vision API вернул ошибку ${response.status} без тела ответа`,
       );
     }
-    return UNPARSEABLE_ANALYSIS;
+    throw new AiAnalysisError("Vision API вернул пустой ответ");
   }
 
   let body: z.infer<typeof geminiResponseSchema>;
   try {
-    // Конверт от Google — обычный JSON; чистка нужна только для текста модели,
-    // иначе fence внутри строки ответа сломает разбор конверта.
     body = geminiResponseSchema.parse(JSON.parse(rawBody.trim()));
   } catch (error) {
     console.error("Vision API Error Details:", error);
@@ -302,7 +288,7 @@ export async function analyzeScreenshots(
         { cause: error },
       );
     }
-    return UNPARSEABLE_ANALYSIS;
+    throw new AiAnalysisError("Не удалось распарсить ответ Vision API");
   }
 
   if (!response.ok || body.error) {
@@ -314,6 +300,12 @@ export async function analyzeScreenshots(
       isAuthMessage(message)
     ) {
       throw new AiAnalysisError(AUTH_ERROR_MESSAGE);
+    }
+    if (response.status === 404) {
+      await logAvailableModels(apiKey);
+      throw new AiAnalysisError(
+        `Vision API вернул ошибку 404: модель ${VISION_MODEL} недоступна`,
+      );
     }
     throw new AiAnalysisError(
       `Vision API вернул ошибку ${response.status}: ${message}`,
@@ -337,14 +329,11 @@ export async function analyzeScreenshots(
       "finishReason:",
       candidate?.finishReason,
     );
-    // Пустой ответ чаще всего значит SAFETY или MAX_TOKENS — причина
-    // попадает в вердикт, иначе в UI видно только «не удалось распарсить».
-    return candidate?.finishReason
-      ? {
-          ...UNPARSEABLE_ANALYSIS,
-          summary: `Модель не вернула текст (finishReason: ${candidate.finishReason}).`,
-        }
-      : UNPARSEABLE_ANALYSIS;
+    throw new AiAnalysisError(
+      candidate?.finishReason
+        ? `Модель не вернула текст (finishReason: ${candidate.finishReason}).`
+        : "Модель не вернула текст",
+    );
   }
 
   let payload: unknown;
@@ -353,14 +342,14 @@ export async function analyzeScreenshots(
   } catch (error) {
     console.error("Vision API Error Details:", error);
     console.error("Gemini Raw Response:", text);
-    return UNPARSEABLE_ANALYSIS;
+    throw new AiAnalysisError("Не удалось распарсить JSON-вердикт модели");
   }
 
   const validated = analysisSchema.safeParse(payload);
   if (!validated.success) {
     console.error("Vision API Error Details:", validated.error);
     console.error("Gemini Raw Response:", text);
-    return UNPARSEABLE_ANALYSIS;
+    throw new AiAnalysisError("Вердикт модели не соответствует схеме");
   }
 
   return validated.data;
