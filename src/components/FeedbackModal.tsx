@@ -23,7 +23,7 @@ export function FeedbackModal({ userEmail, onClose }: FeedbackModalProps) {
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 bottom-0 z-50 flex justify-center items-start overflow-y-auto bg-black/50 pt-10 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm sm:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -31,7 +31,7 @@ export function FeedbackModal({ userEmail, onClose }: FeedbackModalProps) {
       }}
     >
       <div
-        className="relative w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+        className="relative w-full max-w-lg bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl p-6 flex flex-col max-h-[90vh] overflow-y-auto"
         onClick={(event) => event.stopPropagation()}
       >
         <button
