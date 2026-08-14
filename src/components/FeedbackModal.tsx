@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { FeedbackForm } from "@/app/dashboard/feedback/FeedbackForm";
 import { ghostButton, mutedText } from "@/lib/ui";
 
@@ -21,7 +22,11 @@ export function FeedbackModal({ userEmail, onClose }: FeedbackModalProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  return (
+  if (typeof document === "undefined" || !document.body) {
+    return null;
+  }
+
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex h-full w-full overflow-y-auto bg-black/50 p-4 backdrop-blur-sm"
       onClick={(event) => {
@@ -54,6 +59,7 @@ export function FeedbackModal({ userEmail, onClose }: FeedbackModalProps) {
           showCard={false}
         />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
