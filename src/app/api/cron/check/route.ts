@@ -1,16 +1,23 @@
+import { timingSafeEqual } from "node:crypto";
 import { jsonError } from "@/lib/apiAuth";
 import { runCheckWorker } from "@/lib/checkWorker";
-import { errorMessage } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+function isEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+/** Без `CRON_SECRET` эндпоинт закрыт в любом окружении. */
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
-    return process.env.NODE_ENV !== "production";
+    return false;
   }
-  return request.headers.get("authorization") === `Bearer ${secret}`;
+  return isEqual(request.headers.get("authorization") ?? "", `Bearer ${secret}`);
 }
 
 export async function GET(request: Request) {
@@ -23,6 +30,6 @@ export async function GET(request: Request) {
     return Response.json(run);
   } catch (error) {
     console.error("Cron Worker Error Details:", error);
-    return jsonError(errorMessage(error), 500);
+    return jsonError("Запуск не удался", 500);
   }
 }

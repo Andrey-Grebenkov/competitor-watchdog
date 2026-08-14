@@ -8,6 +8,7 @@ import {
 } from "@/lib/feedback";
 import { formString, isValidEmail, normalizeEmail } from "@/lib/input";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rateLimit";
 import {
   escapeHtml,
   isTelegramConfigured,
@@ -18,6 +19,9 @@ export interface FeedbackFormState {
   error?: string;
   success?: boolean;
 }
+
+const FEEDBACK_WINDOW_MS = 60 * 60 * 1000;
+const MAX_FEEDBACK_PER_WINDOW = 5;
 
 export async function submitFeedback(
   _prevState: FeedbackFormState,
@@ -43,6 +47,15 @@ export async function submitFeedback(
 
   if (!isValidEmail(userEmail)) {
     return { error: "Укажите корректный email для связи" };
+  }
+
+  const allowed = rateLimit({
+    key: `feedback:${userEmail}`,
+    limit: MAX_FEEDBACK_PER_WINDOW,
+    windowMs: FEEDBACK_WINDOW_MS,
+  }).allowed;
+  if (!allowed) {
+    return { error: "Слишком много отзывов, попробуйте позже" };
   }
 
   await prisma.feedback.create({
