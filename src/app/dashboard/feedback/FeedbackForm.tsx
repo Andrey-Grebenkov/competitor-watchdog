@@ -37,7 +37,10 @@ export function FeedbackForm({
   const formClass = showCard ? `p-6 ${card}` : "";
 
   return (
-    <form action={formAction} className={`flex flex-col gap-4 ${formClass}`}>
+    <form
+      action={formAction}
+      className={`relative block space-y-4 ${formClass}`}
+    >
       {userEmail ? (
         <p className={mutedText}>Отзыв будет отправлен от {userEmail}</p>
       ) : (
