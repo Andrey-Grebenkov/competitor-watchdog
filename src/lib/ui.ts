@@ -20,6 +20,8 @@ export const errorText = "text-sm text-red-600";
 
 export const inlineErrorText = "px-3 text-xs text-red-600";
 
+export const inlineWarningText = "px-3 text-xs text-amber-600";
+
 export const mutedText = "text-sm text-black/60 dark:text-white/60";
 
 export const subtleText = "text-xs text-black/50 dark:text-white/50";

@@ -3,13 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-interface RunOptions {
+interface ResponseBody {
+  ok?: boolean;
+  error?: string;
+}
+
+interface RunOptions<Body extends ResponseBody> {
   url: string;
   init?: RequestInit;
   /** Сообщение, если сервер не прислал собственный текст ошибки. */
   fallbackError: string;
   /** Ключ для нескольких действий в одном компоненте. */
   key?: string;
+  /** Разбор успешного ответа до обновления страницы. */
+  onSuccess?: (body: Body | null) => void;
 }
 
 const DEFAULT_KEY = "default";
@@ -23,26 +30,26 @@ export function useApiAction() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async ({
+  const run = async <Body extends ResponseBody = ResponseBody>({
     url,
     init,
     fallbackError,
     key = DEFAULT_KEY,
-  }: RunOptions): Promise<void> => {
+    onSuccess,
+  }: RunOptions<Body>): Promise<void> => {
     setPending(key);
     setError(null);
     try {
       const response = await fetch(url, init);
-      const body = (await response.json().catch(() => null)) as {
-        ok?: boolean;
-        error?: string;
-      } | null;
+      const body = (await response.json().catch(() => null)) as Body | null;
       if (!response.ok || body?.ok === false) {
         setError(body?.error ?? fallbackError);
         return;
       }
+      onSuccess?.(body);
       router.refresh();
-    } catch {
+    } catch (cause) {
+      console.error(`API action failed: ${init?.method ?? "GET"} ${url}`, cause);
       setError(fallbackError);
     } finally {
       setPending(null);

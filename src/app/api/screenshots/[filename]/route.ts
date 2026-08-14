@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { jsonError, requireUser } from "@/lib/apiAuth";
+import { isFsErrorCode } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { SCREENSHOT_DIR } from "@/lib/scraper";
 
@@ -35,8 +36,14 @@ export async function GET(
   let file: Buffer;
   try {
     file = await readFile(filePath);
-  } catch {
-    return jsonError("Файл недоступен", 404);
+  } catch (error) {
+    // Снимки живут в /tmp и могут быть вычищены — это 404, а остальное
+    // (права, сбой диска) — ошибка сервера, которую нельзя глушить.
+    if (isFsErrorCode(error, "ENOENT")) {
+      return jsonError("Файл недоступен", 404);
+    }
+    console.error("Screenshot Read Error Details:", filePath, error);
+    return jsonError("Не удалось прочитать снимок", 500);
   }
 
   return new Response(new Uint8Array(file), {

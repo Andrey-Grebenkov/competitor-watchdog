@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     const run = await runCheckWorker();
     return Response.json(run);
   } catch (error) {
+    console.error("Cron Worker Error Details:", error);
     return jsonError(errorMessage(error), 500);
   }
 }

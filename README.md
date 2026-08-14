@@ -40,6 +40,20 @@ npm run dev
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/check
 ```
 
+## Тесты
+
+Юнит-тесты живут рядом с модулями (`src/lib/*.test.ts`), запускаются Vitest
+(окружение `node`, внешние зависимости — Prisma, Playwright, Gemini, Telegram —
+подменяются моками):
+
+```bash
+npm test              # один прогон
+npm run test:watch    # watch-режим
+npm run test:coverage # отчёт о покрытии (text + html в coverage/)
+```
+
+Покрытие считается по `src/lib` (без `prisma.ts` и `ui.ts`).
+
 ## Тарифы
 
 | Тариф     | Сайтов     | Минимальный интервал | Проверок за 24 ч | Эталонов за 24 ч | Алерты   |
@@ -72,9 +86,11 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/chec
 запрашивается с `generationConfig.responseMimeType = "application/json"` и
 `responseSchema`. Затем `JSON.parse` (с отбрасыванием markdown-обёртки) и
 `analysisSchema.parse`. Дефолты: `https://generativelanguage.googleapis.com/v1beta`
-и `gemini-1.5-flash-latest`; ключ — `GEMINI_API_KEY` или (для совместимости)
+и `gemini-2.0-flash`; ключ — `GEMINI_API_KEY` или (для совместимости)
 `OPENAI_API_KEY`. При 404 модели запрос повторяется по цепочке `GEMINI_MODEL` →
-`gemini-1.5-flash-latest` → `gemini-1.5-pro`.
+`gemini-2.0-flash` → `gemini-1.5-flash-8b` → `gemini-2.0-flash-lite`; если 404
+вернули все, в консоль печатается `Available Models:` — список моделей из
+`GET {baseUrl}/models` для этого ключа.
 Завершающие слеши в `GEMINI_API_BASE` отбрасываются, из имени модели снимается
 префикс `models/`, а `gemini-1.5-flash` дополняется до `gemini-1.5-flash-latest`
 (`geminiEndpoint()`), иначе адрес вида `.../v1beta//models/models/...` даёт 404.
@@ -103,6 +119,14 @@ GEMINI_API_KEY…», при 404/500 — «Vision API вернул ошибку <
 - `persist` — сбой записи в БД или отправки алерта.
 
 Сбой скрапинга никогда не подменяется сообщением про Vision API и наоборот.
+Сбой построения диффа не ломает проверку, но логируется как `Diff Error Details:`.
+Отправка алерта происходит уже после записи `CheckHistory`, поэтому её сбой не
+отменяет проверку: результат остаётся `analyzed`, а текст ошибки приходит в
+`alertError` и показывается в UI жёлтым предупреждением
+(`Alert Error Details:` в логах).
+
+В воркере падение одного сайта не обрывает прогон: ошибка попадает в результат
+этого сайта (`Check Worker Error Details:`), остальные сайты проверяются дальше.
 
 `POST /api/sites/[siteId]/check` при таком сбое отвечает 200 с
 `{ ok: false, failedStage, error }` — 502 больше не возвращается, UI показывает
@@ -112,9 +136,11 @@ GEMINI_API_KEY…», при 404/500 — «Vision API вернул ошибку <
 
 Снимки лежат в `/tmp/screenshots` и отдаются клиенту через
 `GET /api/screenshots/[filename]` — роут требует сессию и проверяет, что файл
-принадлежит проверке сайта этого пользователя. В истории вместо путей выводятся
-миниатюры, клик открывает полноразмерное изображение (закрытие по клику вне окна
-или по кнопке «Закрыть»).
+принадлежит проверке сайта этого пользователя. Отсутствующий файл (`ENOENT`,
+вычищенный `/tmp`) — это 404, любая другая ошибка чтения логируется
+(`Screenshot Read Error Details:`) и отдаётся как 500, а не маскируется под 404.
+В истории вместо путей выводятся миниатюры, клик открывает полноразмерное
+изображение (закрытие по клику вне окна или по кнопке «Закрыть»).
 
 Для повторных проверок `createDiffImage` (`pixelmatch` + `pngjs`) сохраняет PNG
 с подсветкой различий в `CheckHistory.diffImageUrl`, доля изменившихся пикселей —
