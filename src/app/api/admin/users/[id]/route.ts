@@ -1,8 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
-import { planLabel, planNameFor } from "@/lib/plans";
+import { jsonError } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
+import { serializeUser } from "@/lib/users";
 
 const patchSchema = z
   .object({
@@ -26,19 +27,16 @@ export async function PATCH(
   const { id } = await params;
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return Response.json({ error: "Некорректные данные" }, { status: 400 });
+    return jsonError("Некорректные данные", 400);
   }
 
   if (id === admin.id && parsed.data.role === "USER") {
-    return Response.json(
-      { error: "Нельзя снять с себя права администратора" },
-      { status: 400 },
-    );
+    return jsonError("Нельзя снять с себя права администратора", 400);
   }
 
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) {
-    return Response.json({ error: "Пользователь не найден" }, { status: 404 });
+    return jsonError("Пользователь не найден", 404);
   }
 
   const user = await prisma.user.update({
@@ -48,16 +46,7 @@ export async function PATCH(
 
   revalidatePath("/admin");
 
-  return Response.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isUnlimited: user.isUnlimited,
-      subscriptionStatus: user.subscriptionStatus,
-      plan: planLabel(planNameFor(user)),
-    },
-  });
+  return Response.json({ user: serializeUser(user) });
 }
 
 export async function DELETE(
@@ -71,10 +60,7 @@ export async function DELETE(
 
   const { id } = await params;
   if (id === admin.id) {
-    return Response.json(
-      { error: "Нельзя удалить свой аккаунт" },
-      { status: 400 },
-    );
+    return jsonError("Нельзя удалить свой аккаунт", 400);
   }
 
   const target = await prisma.user.findUnique({
@@ -82,7 +68,7 @@ export async function DELETE(
     select: { id: true },
   });
   if (!target) {
-    return Response.json({ error: "Пользователь не найден" }, { status: 404 });
+    return jsonError("Пользователь не найден", 404);
   }
 
   // Сайты, проверки, эталоны, сессии и аккаунты удаляются каскадом.

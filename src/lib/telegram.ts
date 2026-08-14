@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AppError } from "@/lib/errors";
 
 const TELEGRAM_API_BASE =
   process.env.TELEGRAM_API_BASE ?? "https://api.telegram.org";
@@ -16,11 +17,8 @@ function safeJsonParse(raw: string): unknown {
   }
 }
 
-export class TelegramError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = "TelegramError";
-  }
+export class TelegramError extends AppError {
+  readonly name = "TelegramError";
 }
 
 export interface SendMessageOptions {

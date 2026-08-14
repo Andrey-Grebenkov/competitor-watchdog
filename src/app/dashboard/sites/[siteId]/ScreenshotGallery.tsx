@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ghostButton } from "@/lib/ui";
+import { ghostButton, subtleText } from "@/lib/ui";
 
 export interface ScreenshotItem {
   src: string;
@@ -29,9 +29,7 @@ export function ScreenshotGallery({ items }: { items: ScreenshotItem[] }) {
                 className="h-32 w-52 object-cover object-top"
               />
             </button>
-            <figcaption className="text-xs text-black/50 dark:text-white/50">
-              {item.label}
-            </figcaption>
+            <figcaption className={subtleText}>{item.label}</figcaption>
           </figure>
         ))}
       </div>

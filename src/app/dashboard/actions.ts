@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { performSiteCheck } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
+import { formString } from "@/lib/input";
 import { prisma } from "@/lib/prisma";
 import { baselineLimitMessage, getUserQuota } from "@/lib/quota";
 import { assertPublicUrl, BlockedUrlError } from "@/lib/urlGuard";
@@ -51,10 +52,12 @@ export async function addSite(
   _prevState: AddSiteState,
   formData: FormData,
 ): Promise<AddSiteState> {
-  const name = String(formData.get("name") ?? "").trim();
-  const rawUrl = String(formData.get("url") ?? "").trim();
-  const cssSelector = String(formData.get("cssSelector") ?? "").trim();
-  const rawInterval = String(formData.get("checkIntervalHours") ?? "24").trim();
+  const name = formString(formData, "name");
+  const rawUrl = formString(formData, "url");
+  const cssSelector = formString(formData, "cssSelector");
+  const rawInterval = formString(formData, "checkIntervalHours", {
+    fallback: "24",
+  });
   const values: AddSiteValues = {
     name,
     url: rawUrl,
@@ -160,7 +163,7 @@ export async function toggleSite(formData: FormData): Promise<void> {
     redirect("/login");
   }
 
-  const siteId = String(formData.get("siteId") ?? "");
+  const siteId = formString(formData, "siteId");
   const site = await prisma.watchedSite.findFirst({
     where: { id: siteId, userId: user.id },
   });

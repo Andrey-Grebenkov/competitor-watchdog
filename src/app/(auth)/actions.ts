@@ -5,14 +5,13 @@ import { hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/auth";
+import { formString, isValidEmail, normalizeEmail } from "@/lib/input";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rateLimit";
 
 export interface AuthFormState {
   error?: string;
 }
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const MAX_PASSWORD_LENGTH = 200;
 
@@ -41,13 +40,11 @@ export async function registerUser(
   _prevState: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
+  const email = normalizeEmail(formData.get("email"));
+  const password = formString(formData, "password", { trim: false });
+  const name = formString(formData, "name");
 
-  if (!EMAIL_PATTERN.test(email)) {
+  if (!isValidEmail(email)) {
     return { error: "Укажите корректный email" };
   }
   if (password.length < 8) {
@@ -99,10 +96,8 @@ export async function loginUser(
   _prevState: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-  const password = String(formData.get("password") ?? "");
+  const email = normalizeEmail(formData.get("email"));
+  const password = formString(formData, "password", { trim: false });
 
   if (tooManyAttempts("login", email, MAX_LOGIN_ATTEMPTS)) {
     return { error: "Слишком много попыток входа, попробуйте позже" };

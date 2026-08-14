@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { jsonError } from "@/lib/apiAuth";
 import { runCheckWorker } from "@/lib/checkWorker";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ function isAuthorized(request: Request): boolean {
 
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonError("Unauthorized", 401);
   }
 
   try {
@@ -29,6 +30,6 @@ export async function GET(request: Request) {
     return Response.json(run);
   } catch (error) {
     console.error("Cron Worker Error Details:", error);
-    return Response.json({ error: "Запуск не удался" }, { status: 500 });
+    return jsonError("Запуск не удался", 500);
   }
 }

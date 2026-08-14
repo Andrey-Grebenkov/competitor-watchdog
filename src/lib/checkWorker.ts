@@ -4,7 +4,7 @@ import {
   AiAnalysisError,
   type AnalysisResult,
 } from "@/lib/aiAnalyzer";
-import { errorMessage } from "@/lib/errors";
+import { describeError, errorMessage } from "@/lib/errors";
 import { createDiffImage, type DiffResult } from "@/lib/imageDiff";
 import { planFor, planNameFor } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
@@ -149,10 +149,11 @@ export async function performSiteCheck(
       siteId: site.id,
       status: "failed",
       failedStage: "screenshot",
-      error:
-        error instanceof ScrapeError
-          ? error.message
-          : `Ошибка загрузки сайта (Playwright): ${errorMessage(error)}`,
+      error: describeError(
+        error,
+        ScrapeError,
+        "Ошибка загрузки сайта (Playwright)",
+      ),
     };
   }
 
@@ -197,10 +198,11 @@ export async function performSiteCheck(
         siteId: site.id,
         status: "failed",
         failedStage: "analysis",
-        error:
-          error instanceof AiAnalysisError
-            ? error.message
-            : `Ошибка анализа ИИ (Vision API): ${errorMessage(error)}`,
+        error: describeError(
+          error,
+          AiAnalysisError,
+          "Ошибка анализа ИИ (Vision API)",
+        ),
       };
     }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { ActionError } from "@/components/ActionError";
 import { ghostButtonDanger } from "@/lib/ui";
+import { useApiAction } from "@/lib/useApiAction";
 
 export function DeleteSiteButton({
   siteId,
@@ -11,35 +11,17 @@ export function DeleteSiteButton({
   siteId: string;
   siteName: string;
 }) {
-  const router = useRouter();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, busy, run } = useApiAction();
 
-  const handleClick = async () => {
+  const handleClick = () => {
     if (!window.confirm(`Удалить «${siteName}» и всю историю проверок?`)) {
       return;
     }
-
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/sites/${siteId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        setError(body?.error ?? "Не удалось удалить сайт");
-        return;
-      }
-      router.refresh();
-    } catch (cause) {
-      console.error("Site delete request failed", cause);
-      setError("Не удалось удалить сайт");
-    } finally {
-      setPending(false);
-    }
+    return run({
+      url: `/api/sites/${siteId}`,
+      init: { method: "DELETE" },
+      fallbackError: "Не удалось удалить сайт",
+    });
   };
 
   return (
@@ -47,14 +29,12 @@ export function DeleteSiteButton({
       <button
         type="button"
         onClick={handleClick}
-        disabled={pending}
+        disabled={busy}
         className={`${ghostButtonDanger} whitespace-nowrap`}
       >
-        {pending ? "Удаляем…" : "Удалить"}
+        {busy ? "Удаляем…" : "Удалить"}
       </button>
-      {error ? (
-        <span className="px-3 text-xs text-red-600">{error}</span>
-      ) : null}
+      <ActionError message={error} />
     </span>
   );
 }
