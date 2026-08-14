@@ -23,32 +23,39 @@ export function FeedbackModal({ userEmail, onClose }: FeedbackModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-6 pt-20 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="w-full max-w-2xl">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Обратная связь</h2>
-            <p className={mutedText}>
-              Расскажите о баге, предложите улучшение или просто поделитесь
-              впечатлением.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className={ghostButton}
-            aria-label="Закрыть"
-          >
-            ✕
-          </button>
+      <div
+        className="relative w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className={`absolute right-3 top-3 ${ghostButton}`}
+          aria-label="Закрыть"
+        >
+          ✕
+        </button>
+
+        <div className="mb-4 pr-8">
+          <h2 className="text-lg font-semibold">Обратная связь</h2>
+          <p className={mutedText}>
+            Расскажите о баге, предложите улучшение или просто поделитесь
+            впечатлением.
+          </p>
         </div>
-        <FeedbackForm userEmail={userEmail} />
+
+        <FeedbackForm
+          userEmail={userEmail}
+          onCancel={onClose}
+          showCard={false}
+        />
       </div>
     </div>
   );

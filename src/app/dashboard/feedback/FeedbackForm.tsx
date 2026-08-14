@@ -7,10 +7,20 @@ import {
   FEEDBACK_TYPE_LABELS,
   MAX_FEEDBACK_LENGTH,
 } from "@/lib/feedback";
-import { card, errorText, input, mutedText } from "@/lib/ui";
+import { card, errorText, ghostButton, input, mutedText } from "@/lib/ui";
 import { submitFeedback, type FeedbackFormState } from "./actions";
 
-export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
+export interface FeedbackFormProps {
+  userEmail: string | null;
+  onCancel?: () => void;
+  showCard?: boolean;
+}
+
+export function FeedbackForm({
+  userEmail,
+  onCancel,
+  showCard = true,
+}: FeedbackFormProps) {
   const [state, formAction] = useActionState<FeedbackFormState, FormData>(
     submitFeedback,
     {},
@@ -24,8 +34,10 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
     );
   }
 
+  const formClass = showCard ? `p-6 ${card}` : "";
+
   return (
-    <form action={formAction} className={`flex flex-col gap-4 p-6 ${card}`}>
+    <form action={formAction} className={`flex flex-col gap-4 ${formClass}`}>
       {userEmail ? (
         <p className={mutedText}>Отзыв будет отправлен от {userEmail}</p>
       ) : (
@@ -77,11 +89,22 @@ export function FeedbackForm({ userEmail }: { userEmail: string | null }) {
 
       {state.error ? <p className={errorText}>{state.error}</p> : null}
 
-      <SubmitButton
-        label="Отправить"
-        pendingLabel="Отправляем…"
-        className="self-start"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SubmitButton
+          label="Отправить"
+          pendingLabel="Отправляем…"
+          className={onCancel ? "" : "self-start"}
+        />
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className={ghostButton}
+          >
+            Отмена
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }
