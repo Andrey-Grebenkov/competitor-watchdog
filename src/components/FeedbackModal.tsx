@@ -23,7 +23,7 @@ export function FeedbackModal({ userEmail, onClose }: FeedbackModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      className="fixed top-0 left-0 right-0 bottom-0 z-50 flex justify-center items-start overflow-y-auto bg-black/50 pt-10 px-4 backdrop-blur-sm"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
