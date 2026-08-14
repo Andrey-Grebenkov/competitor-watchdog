@@ -14,9 +14,6 @@ const VIEWPORT = { width: 1280, height: 800 };
 
 const NAVIGATION_TIMEOUT_MS = 60_000;
 
-/** Пауза после domcontentloaded, чтобы страница успела отрисоваться. */
-const RENDER_DELAY_MS = 2000;
-
 export interface CaptureOptions {
   url: string;
   cssSelector?: string | null;
@@ -163,7 +160,19 @@ export async function captureScreenshot({
     if (!(await isPublicUrl(page.url()))) {
       throw new BlockedUrlError("редирект во внутреннюю сеть");
     }
-    await page.waitForTimeout(RENDER_DELAY_MS);
+
+    // Ждём, пока уляжется сеть и подгрузятся шрифты; отключаем анимации,
+    // чтобы убрать рендерный шум и снизить ложные срабатывания диффа.
+    await page
+      .waitForLoadState("networkidle", { timeout: 15_000 })
+      .catch(() => {});
+    await page.evaluate(() => document.fonts.ready).catch(() => {});
+    await page.emulateMedia({ reducedMotion: "reduce" }).catch(() => {});
+    await page
+      .addStyleTag({
+        content: "*{animation:none!important;transition:none!important}",
+      })
+      .catch(() => {});
 
     if (cssSelector) {
       const element = page.locator(cssSelector).first();

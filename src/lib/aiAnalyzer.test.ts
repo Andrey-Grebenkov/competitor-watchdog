@@ -251,6 +251,63 @@ describe("analyzeScreenshots", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("retries on 429 rate limit and then succeeds", async () => {
+    const { analyzeScreenshots } = await loadAnalyzer();
+    fetchMock
+      .mockResolvedValueOnce(
+        geminiResponse({ error: { code: 429, message: "rate limit" } }, 429),
+      )
+      .mockResolvedValue(geminiResponse(candidate(JSON.stringify(VERDICT))));
+
+    await expect(analyzeScreenshots("/old.png", "/new.png")).resolves.toEqual(
+      VERDICT,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on repeated 503 UNAVAILABLE", async () => {
+    const { analyzeScreenshots, AiAnalysisError } = await loadAnalyzer();
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        geminiResponse({ error: { code: 503, message: "UNAVAILABLE" } }, 503),
+      ),
+    );
+
+    const error = await analyzeScreenshots("/old.png", "/new.png").catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toBeInstanceOf(AiAnalysisError);
+    expect((error as Error).message).toContain("503");
+    expect((error as Error).message).toContain("UNAVAILABLE");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry on 404", async () => {
+    const { analyzeScreenshots, AiAnalysisError, GEMINI_API_BASE } =
+      await loadAnalyzer({ GEMINI_API_BASE: "https://gem.test/v1beta" });
+    fetchMock.mockImplementation(async (input) =>
+      String(input).includes("/models?")
+        ? geminiResponse({ models: [{ name: "models/gemini-real" }] })
+        : geminiResponse({ error: { code: 404, message: "not found" } }, 404),
+    );
+
+    const error = await analyzeScreenshots("/old.png", "/new.png").catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toBeInstanceOf(AiAnalysisError);
+    expect((error as Error).message).toMatch(/404/);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://gem.test/v1beta/models/gemini-3.6-flash:generateContent",
+      expect.any(Object),
+    );
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toBe(
+      `${GEMINI_API_BASE}/models?key=key-1`,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("reports the auth hint for 401/403 and for auth-ish messages", async () => {
     const { analyzeScreenshots, AUTH_ERROR_MESSAGE } = await loadAnalyzer();
 
@@ -293,7 +350,7 @@ describe("analyzeScreenshots", () => {
 
   it("fails when an error status comes without a body", async () => {
     const { analyzeScreenshots } = await loadAnalyzer();
-    fetchMock.mockResolvedValue(new Response("", { status: 500 }));
+    fetchMock.mockImplementation(() => Promise.resolve(new Response("", { status: 500 })));
 
     await expect(analyzeScreenshots("/old.png", "/new.png")).rejects.toThrow(
       "Vision API вернул ошибку 500 без тела ответа",
@@ -302,8 +359,8 @@ describe("analyzeScreenshots", () => {
 
   it("fails when an error status comes with an unparseable body", async () => {
     const { analyzeScreenshots } = await loadAnalyzer();
-    fetchMock.mockResolvedValue(
-      new Response("<html>oops</html>", { status: 502 }),
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response("<html>oops</html>", { status: 502 })),
     );
 
     await expect(analyzeScreenshots("/old.png", "/new.png")).rejects.toThrow(

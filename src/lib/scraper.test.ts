@@ -20,7 +20,10 @@ const isPublicUrlMock = vi.mocked(isPublicUrl);
 interface PageStub {
   addInitScript: ReturnType<typeof vi.fn>;
   goto: ReturnType<typeof vi.fn>;
-  waitForTimeout: ReturnType<typeof vi.fn>;
+  waitForLoadState: ReturnType<typeof vi.fn>;
+  evaluate: ReturnType<typeof vi.fn>;
+  emulateMedia: ReturnType<typeof vi.fn>;
+  addStyleTag: ReturnType<typeof vi.fn>;
   screenshot: ReturnType<typeof vi.fn>;
   locator: ReturnType<typeof vi.fn>;
   route: ReturnType<typeof vi.fn>;
@@ -35,7 +38,10 @@ function makeBrowser() {
   const page: PageStub = {
     addInitScript: vi.fn().mockResolvedValue(undefined),
     goto: vi.fn().mockResolvedValue(null),
-    waitForTimeout: vi.fn().mockResolvedValue(undefined),
+    waitForLoadState: vi.fn().mockResolvedValue(undefined),
+    evaluate: vi.fn().mockResolvedValue(undefined),
+    emulateMedia: vi.fn().mockResolvedValue(undefined),
+    addStyleTag: vi.fn().mockResolvedValue(undefined),
     screenshot: vi.fn().mockResolvedValue(Buffer.from("")),
     locator: vi.fn(() => ({ first: () => element })),
     route: vi.fn().mockResolvedValue(undefined),

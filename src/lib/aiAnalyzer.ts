@@ -113,7 +113,7 @@ const availableModelsSchema = z.object({
   models: z.array(z.object({ name: z.string().optional() })).optional(),
 });
 
-/** Количество повторов при таймауте fetch. */
+/** Количество повторных попыток. */
 const AI_FETCH_RETRIES = 2;
 
 /** Таймаут запроса к Gemini, мс. */
@@ -122,16 +122,23 @@ const AI_FETCH_TIMEOUT_MS = 60_000;
 /** Таймаут вспомогательного запроса списка моделей, мс. */
 const LIST_MODELS_TIMEOUT_MS = 10_000;
 
+/** Максимальная длина логируемых ответов, символов. */
+const MAX_LOG_LENGTH = 2000;
+
 /**
- * Готовит текст к `JSON.parse`: снимает markdown-обёртку ```json ... ``` (даже
- * если вокруг есть пояснения) и убирает непечатаемые управляющие символы.
+ * Обрезает длинную строку до лимита, чтобы логи не разрастались
+ * на нешлюзовых ответах.
  */
-function cleanJsonText(content: string): string {
-  const withoutControls = content
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufeff]/g, "")
-    .trim();
-  const fenced = withoutControls.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  return (fenced ? fenced[1] : withoutControls).trim();
+function truncate(value: string, max = MAX_LOG_LENGTH): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function backoffMs(attempt: number): number {
+  return Math.min(1000 * 2 ** attempt, 10_000);
 }
 
 function isAuthMessage(message: string): boolean {
@@ -146,6 +153,62 @@ function isAbortError(error: unknown): boolean {
     (error.name === "AbortError" ||
       (error as { code?: string }).code === "ABORT_ERR")
   );
+}
+
+interface GeminiErrorEnvelope {
+  error?: {
+    code?: number | string;
+    message?: string;
+    status?: string;
+  };
+}
+
+function parseErrorEnvelope(rawBody: string): GeminiErrorEnvelope | null {
+  try {
+    return JSON.parse(rawBody.trim() || "{}") as GeminiErrorEnvelope;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Проверяет, стоит ли повторять запрос при данном HTTP-ответе.
+ * Повторяем 429, 5xx и UNAVAILABLE; 404 и ошибки авторизации — нет.
+ */
+function isRetriableHttpStatus(response: Response, rawBody: string): boolean {
+  if (response.status === 429) return true;
+  if (response.status >= 500 && response.status < 600) return true;
+
+  const envelope = parseErrorEnvelope(rawBody);
+  if (!envelope?.error) return false;
+
+  const { message, status } = envelope.error;
+  if (status === "UNAVAILABLE" || /unavailable/i.test(message ?? "")) return true;
+
+  return false;
+}
+
+function extractErrorMessage(response: Response, rawBody: string): string {
+  const envelope = parseErrorEnvelope(rawBody);
+  return envelope?.error?.message ?? rawBody.slice(0, 2000);
+}
+
+/**
+ * Пытается разобрать JSON напрямую (модель отдаёт application/json),
+ * и только при неудаче достаёт JSON из markdown-обёртки ```json ... ```.
+ * Убирает непечатаемые управляющие символы.
+ */
+function parseModelJson(content: string): unknown {
+  const withoutControls = content
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufeff]/g, "")
+    .trim();
+  try {
+    return JSON.parse(withoutControls);
+  } catch {
+    const fenced = withoutControls.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const extracted = (fenced ? fenced[1] : withoutControls).trim();
+    return JSON.parse(extracted);
+  }
 }
 
 async function toBase64(filePath: string): Promise<string> {
@@ -219,6 +282,8 @@ export async function analyzeScreenshots(
   });
 
   let response: Response | undefined;
+  let rawBody = "";
+
   for (let attempt = 0; attempt <= AI_FETCH_RETRIES; attempt++) {
     try {
       response = await fetch(geminiEndpoint(), {
@@ -230,12 +295,13 @@ export async function analyzeScreenshots(
         body: requestBody,
         signal: AbortSignal.timeout(AI_FETCH_TIMEOUT_MS),
       });
-      break;
+      rawBody = await response.text();
     } catch (error) {
       if (isAbortError(error) && attempt < AI_FETCH_RETRIES) {
         console.error(
-          `Vision API request timed out (attempt ${attempt + 1}), retrying...`,
+          `Vision API request timed out (attempt ${attempt + 1}), retrying after ${backoffMs(attempt)}ms...`,
         );
+        await sleep(backoffMs(attempt));
         continue;
       }
       console.error("Vision API Error Details:", error);
@@ -249,25 +315,24 @@ export async function analyzeScreenshots(
         { cause: error },
       );
     }
+
+    if (isRetriableHttpStatus(response, rawBody) && attempt < AI_FETCH_RETRIES) {
+      console.error(
+        `Vision API вернул ошибку ${response.status}: ${truncate(extractErrorMessage(response, rawBody))}, retrying after ${backoffMs(attempt)}ms...`,
+      );
+      await sleep(backoffMs(attempt));
+      continue;
+    }
+
+    break;
   }
 
   if (!response) {
     throw new AiAnalysisError("Vision API request timed out");
   }
 
-  let rawBody = "";
-  try {
-    rawBody = await response.text();
-  } catch (error) {
-    console.error("Vision API Error Details:", error);
-    throw new AiAnalysisError(
-      `Не удалось прочитать ответ Vision API: ${errorMessage(error)}`,
-      { cause: error },
-    );
-  }
-
   if (!rawBody || !rawBody.trim()) {
-    console.error("Gemini Raw Response:", rawBody);
+    console.error("Gemini Raw Response:", truncate(rawBody));
     if (!response.ok) {
       throw new AiAnalysisError(
         `Vision API вернул ошибку ${response.status} без тела ответа`,
@@ -281,10 +346,10 @@ export async function analyzeScreenshots(
     body = geminiResponseSchema.parse(JSON.parse(rawBody.trim()));
   } catch (error) {
     console.error("Vision API Error Details:", error);
-    console.error("Gemini Raw Response:", rawBody);
+    console.error("Gemini Raw Response:", truncate(rawBody));
     if (!response.ok) {
       throw new AiAnalysisError(
-        `Vision API вернул ошибку ${response.status}: ${rawBody.slice(0, 200)}`,
+        `Vision API вернул ошибку ${response.status}: ${truncate(rawBody)}`,
         { cause: error },
       );
     }
@@ -292,7 +357,7 @@ export async function analyzeScreenshots(
   }
 
   if (!response.ok || body.error) {
-    const message = body.error?.message ?? rawBody.slice(0, 200);
+    const message = truncate(body.error?.message ?? rawBody);
     console.error("Vision API Error Details:", response.status, message);
     if (
       response.status === 401 ||
@@ -325,7 +390,7 @@ export async function analyzeScreenshots(
   if (!text) {
     console.error(
       "Gemini Raw Response:",
-      rawBody,
+      truncate(rawBody),
       "finishReason:",
       candidate?.finishReason,
     );
@@ -338,17 +403,17 @@ export async function analyzeScreenshots(
 
   let payload: unknown;
   try {
-    payload = JSON.parse(cleanJsonText(text));
+    payload = parseModelJson(text);
   } catch (error) {
     console.error("Vision API Error Details:", error);
-    console.error("Gemini Raw Response:", text);
+    console.error("Gemini Raw Response:", truncate(text));
     throw new AiAnalysisError("Не удалось распарсить JSON-вердикт модели");
   }
 
   const validated = analysisSchema.safeParse(payload);
   if (!validated.success) {
     console.error("Vision API Error Details:", validated.error);
-    console.error("Gemini Raw Response:", text);
+    console.error("Gemini Raw Response:", truncate(text));
     throw new AiAnalysisError("Вердикт модели не соответствует схеме");
   }
 
