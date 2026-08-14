@@ -7,6 +7,10 @@ import { performSiteCheck } from "@/lib/checkWorker";
 import { getCurrentUser } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { baselineLimitMessage, getUserQuota } from "@/lib/quota";
+import { assertPublicUrl, BlockedUrlError } from "@/lib/urlGuard";
+
+const MAX_NAME_LENGTH = 120;
+const MAX_SELECTOR_LENGTH = 300;
 
 export interface AddSiteValues {
   name: string;
@@ -24,15 +28,22 @@ export interface AddSiteState {
   values?: AddSiteValues;
 }
 
-function normalizeUrl(raw: string): string | null {
+/**
+ * Нормализует URL и заодно отсекает адреса внутренней сети (SSRF).
+ * Возвращает текст ошибки вместо URL, если адрес недопустим.
+ */
+async function normalizeUrl(
+  raw: string,
+): Promise<{ url: string } | { error: string }> {
   try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return null;
-    }
-    return parsed.toString();
-  } catch {
-    return null;
+    return { url: (await assertPublicUrl(raw)).toString() };
+  } catch (error) {
+    return {
+      error:
+        error instanceof BlockedUrlError
+          ? error.message
+          : "Укажите корректный http(s) URL",
+    };
   }
 }
 
@@ -56,21 +67,36 @@ export async function addSite(
     return { error: "Нет активного пользователя", values };
   }
 
-  const url = normalizeUrl(rawUrl);
   const checkIntervalHours = Number(rawInterval);
 
   if (!name) {
     return { error: "Укажите название сайта", values };
   }
-  if (!url) {
-    return { error: "Укажите корректный http(s) URL", values };
+  if (name.length > MAX_NAME_LENGTH) {
+    return {
+      error: `Название не должно превышать ${MAX_NAME_LENGTH} символов`,
+      values,
+    };
   }
+  if (cssSelector.length > MAX_SELECTOR_LENGTH) {
+    return {
+      error: `Селектор не должен превышать ${MAX_SELECTOR_LENGTH} символов`,
+      values,
+    };
+  }
+
   if (!Number.isInteger(checkIntervalHours) || checkIntervalHours < 1) {
     return {
       error: "Интервал должен быть целым числом часов (минимум 1)",
       values,
     };
   }
+
+  const normalized = await normalizeUrl(rawUrl);
+  if ("error" in normalized) {
+    return { error: normalized.error, values };
+  }
+  const url = normalized.url;
 
   const quota = await getUserQuota(user);
   if (quota.sitesExhausted) {

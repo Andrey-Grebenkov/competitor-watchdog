@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type Page, type Route } from "playwright";
 import { errorMessage } from "@/lib/errors";
+import { assertPublicUrl, BlockedUrlError, isPublicUrl } from "@/lib/urlGuard";
 
 export const SCREENSHOT_DIR = "/tmp/screenshots";
 
@@ -36,6 +37,65 @@ export interface CaptureResult {
   usedSelector: boolean;
 }
 
+/** Максимум редиректов, которые разрешено пройти при навигации. */
+const MAX_REDIRECTS = 10;
+
+/**
+ * Загружает документ, проходя редиректы вручную и проверяя каждый переход:
+ * Chromium следует за 3xx внутри себя, поэтому обработчик `page.route` для
+ * целевого адреса уже не вызывается и одной проверки запроса недостаточно —
+ * `https://public.example/redirect?to=http://127.0.0.1` иначе снимал бы
+ * скриншот внутреннего сервиса.
+ */
+async function fetchFollowingSafeRedirects(route: Route): Promise<void> {
+  let currentUrl = route.request().url();
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const response = await route.fetch({ url: currentUrl, maxRedirects: 0 });
+    const status = response.status();
+    const location = response.headers().location;
+    if (status < 300 || status > 399 || !location) {
+      await route.fulfill({ response });
+      return;
+    }
+
+    const nextUrl = new URL(location, currentUrl).toString();
+    if (!(await isPublicUrl(nextUrl))) {
+      await route.abort("blockedbyclient");
+      return;
+    }
+    currentUrl = nextUrl;
+  }
+
+  await route.abort("blockedbyclient");
+}
+
+/**
+ * Отсекает любые запросы страницы на адреса внутренней сети — и навигацию
+ * (включая редиректы), и подгружаемые ресурсы, которые иначе попали бы в
+ * скриншот.
+ */
+async function blockPrivateRequests(page: Page): Promise<void> {
+  await page.route("**/*", async (route: Route) => {
+    const request = route.request();
+    if (!(await isPublicUrl(request.url()))) {
+      await route.abort("blockedbyclient");
+      return;
+    }
+    if (request.resourceType() !== "document") {
+      await route.continue();
+      return;
+    }
+
+    try {
+      await fetchFollowingSafeRedirects(route);
+    } catch (error) {
+      console.error("Playwright Error Details:", error);
+      await route.abort("failed");
+    }
+  });
+}
+
 async function applyStealth(page: Page): Promise<void> {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false });
@@ -54,6 +114,17 @@ export async function captureScreenshot({
   cssSelector,
   timeoutMs = NAVIGATION_TIMEOUT_MS,
 }: CaptureOptions): Promise<CaptureResult> {
+  try {
+    await assertPublicUrl(url);
+  } catch (error) {
+    if (error instanceof BlockedUrlError) {
+      throw new ScrapeError(`Адрес недоступен для проверки: ${error.message}`, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+
   try {
     await mkdir(SCREENSHOT_DIR, { recursive: true });
   } catch (error) {
@@ -87,8 +158,14 @@ export async function captureScreenshot({
 
     const page = await context.newPage();
     await applyStealth(page);
+    await blockPrivateRequests(page);
 
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    // Последний барьер: даже если переход прошёл мимо перехвата (JS-redirect,
+    // meta refresh), во внутреннюю сеть скриншот не снимаем.
+    if (!(await isPublicUrl(page.url()))) {
+      throw new BlockedUrlError("редирект во внутреннюю сеть");
+    }
     await page.waitForTimeout(RENDER_DELAY_MS);
 
     if (cssSelector) {
@@ -105,8 +182,19 @@ export async function captureScreenshot({
       usedSelector: Boolean(cssSelector),
     };
   } catch (error) {
+    if (error instanceof BlockedUrlError) {
+      throw new ScrapeError(`Адрес недоступен для проверки: ${error.message}`, {
+        cause: error,
+      });
+    }
     console.error("Playwright Error Details:", error);
     const details = errorMessage(error);
+    if (details.includes("ERR_BLOCKED_BY_CLIENT")) {
+      throw new ScrapeError(
+        "Адрес недоступен для проверки: редирект во внутреннюю сеть",
+        { cause: error },
+      );
+    }
     throw new ScrapeError(
       `Ошибка загрузки сайта (Playwright): ${details.split("\n")[0]}`,
       { cause: error },

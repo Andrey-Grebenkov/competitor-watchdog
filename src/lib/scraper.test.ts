@@ -2,12 +2,20 @@ import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SCREENSHOT_DIR, ScrapeError, captureScreenshot } from "@/lib/scraper";
+import { BlockedUrlError, assertPublicUrl, isPublicUrl } from "@/lib/urlGuard";
 
 vi.mock("node:fs/promises", () => ({ mkdir: vi.fn() }));
 vi.mock("playwright", () => ({ chromium: { launch: vi.fn() } }));
+vi.mock("@/lib/urlGuard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/urlGuard")>()),
+  assertPublicUrl: vi.fn(),
+  isPublicUrl: vi.fn(),
+}));
 
 const launchMock = vi.mocked(chromium.launch);
 const mkdirMock = vi.mocked(mkdir);
+const assertPublicUrlMock = vi.mocked(assertPublicUrl);
+const isPublicUrlMock = vi.mocked(isPublicUrl);
 
 interface PageStub {
   addInitScript: ReturnType<typeof vi.fn>;
@@ -15,6 +23,8 @@ interface PageStub {
   waitForTimeout: ReturnType<typeof vi.fn>;
   screenshot: ReturnType<typeof vi.fn>;
   locator: ReturnType<typeof vi.fn>;
+  route: ReturnType<typeof vi.fn>;
+  url: ReturnType<typeof vi.fn>;
 }
 
 function makeBrowser() {
@@ -28,6 +38,8 @@ function makeBrowser() {
     waitForTimeout: vi.fn().mockResolvedValue(undefined),
     screenshot: vi.fn().mockResolvedValue(Buffer.from("")),
     locator: vi.fn(() => ({ first: () => element })),
+    route: vi.fn().mockResolvedValue(undefined),
+    url: vi.fn(() => "https://a.test/"),
   };
   const newContext = vi.fn().mockResolvedValue({
     newPage: vi.fn().mockResolvedValue(page),
@@ -39,6 +51,10 @@ function makeBrowser() {
 beforeEach(() => {
   launchMock.mockReset();
   mkdirMock.mockReset().mockResolvedValue(undefined);
+  assertPublicUrlMock
+    .mockReset()
+    .mockImplementation(async (raw: string) => new URL(raw));
+  isPublicUrlMock.mockReset().mockResolvedValue(true);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -122,5 +138,29 @@ describe("captureScreenshot", () => {
     await expect(captureScreenshot({ url: "https://a.test" })).rejects.toThrow(
       "Ошибка загрузки сайта (Playwright): chromium is not installed",
     );
+  });
+
+  it("refuses an internal address before launching the browser", async () => {
+    assertPublicUrlMock.mockRejectedValue(
+      new BlockedUrlError("Адрес во внутренней сети недопустим"),
+    );
+
+    await expect(captureScreenshot({ url: "http://127.0.0.1" })).rejects.toThrow(
+      "Адрес недоступен для проверки: Адрес во внутренней сети недопустим",
+    );
+    expect(launchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not shoot a page that ended up on an internal address", async () => {
+    const { browser, page, close } = makeBrowser();
+    launchMock.mockResolvedValue(browser as never);
+    page.url.mockReturnValue("http://127.0.0.1:3000/");
+    isPublicUrlMock.mockResolvedValue(false);
+
+    await expect(captureScreenshot({ url: "https://a.test" })).rejects.toThrow(
+      "Адрес недоступен для проверки: редирект во внутреннюю сеть",
+    );
+    expect(page.screenshot).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
