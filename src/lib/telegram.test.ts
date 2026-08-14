@@ -11,7 +11,7 @@ async function loadTelegram(): Promise<TelegramModule> {
 const fetchMock = vi.fn<typeof fetch>();
 
 function okResponse(): Response {
-  return new Response("{}", { status: 200 });
+  return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }
 
 beforeEach(() => {
